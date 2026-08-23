@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Junior Software Engineer — UI PREVIEW (mock modules)</title>
+<link rel="stylesheet" href="../sim/ui.css">
+<style>
+  /* preview-only chrome so nobody mistakes this for the real app */
+  #preview-tag {
+    position: fixed; top: 0; right: 0; z-index: 500;
+    background: #d29922; color: #0d1117; font: 700 9px/1 ui-monospace, Menlo, monospace;
+    letter-spacing: .16em; padding: 4px 8px; border-bottom-left-radius: 4px;
+    pointer-events: none; opacity: .85;
+  }
+  #diag-out {
+    position: fixed; left: 0; bottom: 0; z-index: 400; max-height: 46vh; overflow: auto;
+    background: #0b0f14; color: #c9d1d9; font: 10px/1.5 ui-monospace, Menlo, monospace;
+    border-top: 1px solid #30363d; padding: 8px 12px; margin: 0; width: 100%;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<div id="preview-tag">UI PREVIEW · MOCK DEV/BOARD/SQUAD</div>
+
+<div id="jes-boot" style="padding:40px 32px;font:13px ui-monospace,Menlo,monospace;color:#8b949e">
+  booting preview…
+</div>
+
+<script>
+/* capture everything the page complains about, before anything else loads */
+window.__ERRORS__ = [];
+window.addEventListener('error', function (e) {
+  window.__ERRORS__.push('error: ' + e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno);
+});
+window.addEventListener('unhandledrejection', function (e) {
+  window.__ERRORS__.push('unhandled rejection: ' + (e.reason && e.reason.message || e.reason));
+});
+(function () {
+  var ce = console.error;
+  console.error = function () {
+    window.__ERRORS__.push('console.error: ' + Array.prototype.join.call(arguments, ' '));
+    ce.apply(console, arguments);
+  };
+})();
+</script>
+
+<!-- REAL data, MOCK modules.
+     ui_mocks.js defines window.Dev, window.Board and window.Squad, replacing
+     sim/dev.js + sim/board.js + sim/squad.js. Only sim/ui.js and sim/ui.css
+     are the real product files. -->
+<script src="../data/repo.js"></script>
+
+<script>
+/* SPEC §1/§6: only dev.js may read ground truth, and ui.js must never call
+   reveal() before the retro is submitted. Wrap it here — between repo.js and
+   ui.js — and record the stack of every call so the harness can prove that no
+   call ever originates in sim/ui.js. */
+(function () {
+  var orig = window.SIM_REPO.reveal;
+  window.__REVEALS__ = [];
+  window.SIM_REPO.reveal = function () {
+    var stack = '';
+    try { throw new Error('x'); } catch (e) { stack = String(e.stack || ''); }
+    window.__REVEALS__.push(stack.split('\n').slice(1, 6).join(' | '));
+    return orig.apply(this, arguments);
+  };
+})();
+</script>
+
+<script src="ui_mocks.js"></script>
+<script src="../sim/ui.js"></script>
+
+<script>
+/* --------------------------------------------------------------------------
+   PREVIEW-ONLY test driver. Does nothing unless you add a hash to the URL:
+
+     ui_preview.html                -> normal manual preview (brief screen)
+     ui_preview.html#auto=brief     -> the brief
+     ui_preview.html#auto=fresh     -> desk on day 1, nothing estimated — work is gated shut
+     ui_preview.html#auto=desk      -> desk, a few days in, actions run, one ask
+     ui_preview.html#auto=merged    -> desk after a ticket was understood, tested and merged
+     ui_preview.html#auto=ask       -> desk with the ask panel loaded with evidence
+     ui_preview.html#auto=review    -> desk after a PR bounced, review in the feed
+     ui_preview.html#auto=timeline  -> desk with the timeline board
+     ui_preview.html#auto=burn      -> desk with the burn-up board
+     ui_preview.html#auto=trust     -> desk with the trust board
+     ui_preview.html#auto=abandon   -> desk + the hand-it-back modal
+     ui_preview.html#auto=gate      -> desk + the standup gate modal
+     ui_preview.html#auto=retro     -> the retro screen, filled in
+     ui_preview.html#auto=debrief   -> the debrief, after a submitted retro
+     ui_preview.html#auto=diag      -> desk + a layout/console dump in <pre id="diag-out">
+
+   It drives the same controls a human would.
+   -------------------------------------------------------------------------- */
+(function () {
+  function $(s) { return document.querySelector(s); }
+  function click(sel) {
+    var el = typeof sel === 'string' ? $(sel) : sel;
+    if (el) el.click();
+    return !!el;
+  }
+  function setVal(sel, v) {
+    var el = typeof sel === 'string' ? $(sel) : sel;
+    if (!el) return false;
+    el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+  function closeModal() {
+    var ok = document.querySelector('#modal-layer.active [data-ok]');
+    if (ok) { ok.click(); return true; }
+    return false;
+  }
+  function estimate(tid, hours) {
+    click('.tcard[data-tid="' + tid + '"]');
+    setVal('#wk-estin', String(hours));
+    click('#wk-estbtn');
+  }
+  function run(tid, aid, times) {
+    click('.tcard[data-tid="' + tid + '"]');
+    for (var i = 0; i < (times || 1); i++) click('[data-run="' + aid + '"]');
+  }
+  function ask(tid, to, text) {
+    click('.tcard[data-tid="' + tid + '"]');
+    click('[data-tgt="' + to + '"]');
+    setVal('#ask-q', text);
+    click('#ask-send');
+  }
+
+  function baseline() {
+    click('#br-start');
+    closeModal();                        // the day-1 kickoff gate
+    click('#h-pause');                   // stop the clock so the setup is deterministic
+    estimate('BUG-2201', 3);
+    estimate('BUG-2207', 2.5);
+    estimate('FEAT-2189', 4);
+    estimate('BUG-2214', 2);
+    estimate('FEAT-2195', 6);
+    estimate('CHORE-2150', 1);
+    run('BUG-2201', 'reproduce', 1);
+    run('BUG-2201', 'read_code', 2);
+    run('BUG-2201', 'read_docs', 1);
+    run('BUG-2207', 'read_code', 3);
+    run('BUG-2207', 'git_blame', 1);
+    run('BUG-2207', 'just_try', 1);
+    click('.tcard[data-tid="BUG-2207"]');
+  }
+
+  /* nothing estimated — the work panel is gated shut, which is the point */
+  function fresh() {
+    click('#br-start');
+    closeModal();
+    click('#h-pause');
+  }
+
+  /* the happy path: understood past 90, tested, reviewed, merged */
+  function merged() {
+    baseline();
+    click('.tcard[data-tid="BUG-2201"]');
+    for (var i = 0; i < 3; i++) click('[data-run="read_code"]');
+    click('[data-run="run_tests"]');
+    click('#wk-tests');
+    click('#wk-impl');
+    click('#wk-pr');
+    window.Dev.advance(6);
+    closeModal();
+    click('.tcard[data-tid="BUG-2201"]');
+  }
+
+  function toReview() {
+    baseline();
+    ask('BUG-2207', 'deepa',
+        'I have spent about ninety minutes on the duplicate webhook deliveries. I reproduced it on ' +
+        'staging and read the delivery path; git blame points at a 2024 commit that says to talk to you. ' +
+        'What am I missing?');
+    run('BUG-2201', 'read_code', 2);
+    click('.tcard[data-tid="BUG-2201"]');
+    click('#wk-impl');
+    click('#wk-pr');
+    // let the clock run far enough for the review to land
+    window.Dev.advance(6);
+    closeModal();                        // whatever gate the calendar crossed
+  }
+
+  function fillRetro() {
+    window.__JES_UI__.goRetro();
+    setVal('#rt-narr',
+      'I took the two bugs first because they looked concrete, and that was mostly right. BUG-2201 was ' +
+      'entirely in the code and the wiki actively hurt me — I lost the better part of an hour to a page ' +
+      'describing a class that no longer exists. BUG-2207 I sat on too long before asking Deepa; git blame ' +
+      'was already telling me to go and ask on the first fifteen minutes and I ignored it because asking ' +
+      'felt like admitting something.');
+    setVal('#rt-diff',
+      'Ask Hannah what a rate limit actually means before writing a line of FEAT-2195, and hand BUG-2214 ' +
+      'back on day two instead of proving a known flake is a known flake.');
+    click('#rt-submit');
+  }
+
+  function dump() {
+    var out = document.createElement('pre');
+    out.id = 'diag-out';
+    var L = [];
+    L.push('viewport: ' + window.innerWidth + ' x ' + window.innerHeight);
+    L.push('document scroll: ' + document.documentElement.scrollWidth + ' x ' +
+           document.documentElement.scrollHeight +
+           '  (overflow: ' + (document.documentElement.scrollHeight > window.innerHeight ? 'YES — BAD' : 'no') +
+           ' / ' + (document.documentElement.scrollWidth > window.innerWidth ? 'YES — BAD' : 'no') + ')');
+    ['.hdr', '.p-board', '.p-work', '.p-plot', '.p-ask', '.p-feed'].forEach(function (s) {
+      var el = document.querySelector(s);
+      if (!el) { L.push(s + ': MISSING'); return; }
+      var r = el.getBoundingClientRect();
+      L.push(s + ': x=' + Math.round(r.x) + ' y=' + Math.round(r.y) +
+             ' w=' + Math.round(r.width) + ' h=' + Math.round(r.height) +
+             ' bottom=' + Math.round(r.bottom) +
+             (r.bottom > window.innerHeight + 1 ? '  ← CLIPPED' : ''));
+    });
+    ['#b-board', '#wk-acts', '.p-ask .panel-bd', '#fd-body'].forEach(function (s) {
+      var el = document.querySelector(s);
+      if (!el) { L.push(s + ': MISSING'); return; }
+      L.push(s + ': scrollH=' + el.scrollHeight + ' clientH=' + el.clientHeight +
+             (el.scrollHeight > el.clientHeight ? ' (inner scroll — fine)' : ''));
+    });
+    L.push('errors: ' + (window.__ERRORS__.length ? '\n  ' + window.__ERRORS__.join('\n  ') : 'none'));
+    out.textContent = L.join('\n');
+    document.body.appendChild(out);
+  }
+
+  setTimeout(function () {
+    if (!document.getElementById('preview-tag')) {
+      var t = document.createElement('div');
+      t.id = 'preview-tag';
+      t.textContent = 'UI PREVIEW · MOCK DEV/BOARD/SQUAD';
+      document.body.appendChild(t);
+    }
+    var m = /auto=([a-z]+)/.exec(location.hash || '');
+    if (!m) return;
+    var mode = m[1];
+    try {
+      if (mode === 'brief') { /* nothing — the brief is the boot screen */ }
+      else if (mode === 'desk') { baseline(); }
+      else if (mode === 'fresh') { fresh(); }
+      else if (mode === 'merged') { merged(); }
+      else if (mode === 'ask') {
+        baseline();
+        click('.tcard[data-tid="BUG-2207"]');
+        click('[data-tgt="deepa"]');
+        setVal('#ask-q',
+          'I have been on the duplicate webhook deliveries for about two hours. I reproduced it, read the ' +
+          'delivery path twice, and git blame points at a 2024 commit whose message says to talk to you ' +
+          'before changing anything. What is the flag actually for?');
+      }
+      else if (mode === 'review') { toReview(); }
+      else if (mode === 'timeline') { baseline(); window.__JES_UI__.setPlotTab('timeline'); }
+      else if (mode === 'burn') { baseline(); window.__JES_UI__.setPlotTab('burn'); }
+      else if (mode === 'trust') { baseline(); window.__JES_UI__.setPlotTab('trust'); }
+      else if (mode === 'abandon') { baseline(); click('#wk-abandon'); }
+      else if (mode === 'gate') { baseline(); window.__JES_UI__.gate('standup'); }
+      else if (mode === 'retro') { toReview(); window.__JES_UI__.goRetro(); }
+      else if (mode === 'debrief') { toReview(); fillRetro(); setTimeout(closeModal, 500); }
+      else if (mode === 'debriefgate') { toReview(); fillRetro(); }
+      else if (mode === 'diag') { toReview(); setTimeout(dump, 250); }
+    } catch (e) {
+      window.__ERRORS__.push('driver: ' + (e && e.message ? e.message : e));
+      if (window.console) console.error(e);
+    }
+  }, 120);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+# Raw vendor market data used to BUILD DayTrader/data/days.js.
+# Deliberately not published: these files name the real tickers and dates, which
+# defeats the anonymisation the sim depends on. tools/build_data.py refetches
+# them if you ever need to rebuild. The built, rebased days.js IS committed, so
+# the simulator runs without them.
+DayTrader/tools/*.json
+
+.DS_Store
+*.log

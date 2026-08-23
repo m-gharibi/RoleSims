@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Role Sims</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>%F0%9F%8E%9B</text></svg>">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1b222b; --bd:#30363d;
+    --tx:#c9d1d9; --dim:#8b949e; --good:#3fb950; --bad:#f85149;
+    --warn:#d29922; --acc:#39c5cf;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--tx)}
+  body{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;line-height:1.5;
+       padding:26px 30px 60px;max-width:1500px;margin:0 auto}
+  h1{font-size:20px;letter-spacing:.22em;margin:0;font-weight:600}
+  .sub{color:var(--dim);letter-spacing:.12em;font-size:11px;margin-left:14px}
+  .hdr{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;
+       border-bottom:1px solid var(--bd);padding-bottom:14px;margin-bottom:20px}
+  .lede{color:var(--dim);max-width:96ch;margin:0 0 22px}
+  .lede b{color:var(--tx);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--bd);
+        border-radius:6px;padding:0;display:flex;flex-direction:column;overflow:hidden}
+  .card-hd{padding:13px 15px 11px;border-bottom:1px solid var(--bd)}
+  .card-hd .n{color:var(--dim);font-size:10px;letter-spacing:.18em}
+  .card-hd h2{margin:5px 0 0;font-size:15px;letter-spacing:.1em;font-weight:600}
+  .card-hd .role{color:var(--dim);font-size:11px;margin-top:3px}
+  .card-bd{padding:13px 15px;flex:1}
+  .premise{margin:0 0 12px;color:var(--tx)}
+  .enemy{background:#12181f;border:1px solid var(--bd);border-left:2px solid var(--bad);
+         border-radius:3px;padding:8px 10px;margin:0 0 12px}
+  .enemy .k{color:var(--dim);font-size:10px;letter-spacing:.16em;display:block;margin-bottom:2px}
+  .enemy .v{color:var(--bad)}
+  .facts{width:100%;border-collapse:collapse;margin:0 0 12px}
+  .facts td{padding:3px 0;vertical-align:top;border-bottom:1px dotted #232b34}
+  .facts tr:last-child td{border-bottom:0}
+  .facts .k{color:var(--dim);width:42%;font-size:11px;letter-spacing:.06em}
+  .facts .v{text-align:right;color:var(--tx)}
+  .gates{color:var(--dim);font-size:11px;margin:0 0 4px}
+  .gates b{color:var(--acc);font-weight:400}
+  .card-ft{padding:11px 15px 13px;border-top:1px solid var(--bd);display:flex;
+           gap:8px;align-items:center;flex-wrap:wrap}
+  a.btn{display:inline-block;text-decoration:none;border:1px solid var(--good);color:var(--good);
+        background:rgba(63,185,80,.09);padding:6px 13px;border-radius:3px;letter-spacing:.1em;
+        font-size:12px;transition:background .12s}
+  a.btn:hover{background:rgba(63,185,80,.2)}
+  a.lnk{color:var(--dim);text-decoration:none;font-size:11px;border-bottom:1px dotted #3b444d}
+  a.lnk:hover{color:var(--acc);border-bottom-color:var(--acc)}
+  .how{margin-top:26px;background:var(--panel);border:1px solid var(--bd);border-radius:6px;padding:15px 17px}
+  .how h3{margin:0 0 9px;font-size:11px;letter-spacing:.18em;color:var(--dim);font-weight:600}
+  .how ol{margin:0;padding-left:20px;color:var(--dim);max-width:110ch}
+  .how li{margin-bottom:5px}
+  .how b{color:var(--tx);font-weight:600}
+  .note{color:var(--dim);font-size:11px;margin-top:18px;border-top:1px solid var(--bd);padding-top:12px}
+  code{background:#11161d;border:1px solid var(--bd);border-radius:3px;padding:1px 5px;color:var(--acc)}
+  @media (max-width:700px){body{padding:18px 14px 40px}}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>ROLE SIMS</h1>
+  <span class="sub">FOUR JOBS &middot; ONE ACCOUNT OF YOUR OWN JUDGEMENT &middot; NO INSTALL</span>
+</div>
+
+<p class="lede">
+  Each of these puts you in a seat for a fixed span of time with a scarce resource, a hidden ground
+  truth, and people who push back. None of them is about the tools — a chart, a GPU queue, a feature
+  board and a ticket queue are just surfaces. Each is built around <b>one specific way that
+  confident people reason badly</b>, and each scores you against a truth you cannot see until the end.
+  They pause at gates and hand you to an LLM chat window, where the rest of the cast lives.
+</p>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="card-hd">
+      <span class="n">01</span>
+      <h2>DAY TRADER</h2>
+      <div class="role">Prop desk &middot; three sequential sessions</div>
+    </div>
+    <div class="card-bd">
+      <p class="premise">Three real market sessions, rebased and anonymised, traded on one account that
+        carries your P&amp;L forward. Day 2 is built to punish exactly what Day 1 taught you.</p>
+      <div class="enemy"><span class="k">THE ENEMY</span><span class="v">noise — a run of luck looks
+        identical to an edge</span></div>
+      <table class="facts">
+        <tr><td class="k">Capital</td><td class="v">$25,000</td></tr>
+        <tr><td class="k">Span</td><td class="v">3 sessions</td></tr>
+        <tr><td class="k">Hard stop</td><td class="v">&minus;$1,500 and risk pulls your card</td></tr>
+        <tr><td class="k">Mandatory</td><td class="v">a typed thesis on every entry</td></tr>
+      </table>
+      <p class="gates">GATES &rarr; <b>pre-open pitch</b> &middot; <b>midday risk check</b> &middot; <b>EOD P&amp;L review</b></p>
+    </div>
+    <div class="card-ft">
+      <a class="btn" href="DayTrader/index.html">LAUNCH &rarr;</a>
+      <a class="lnk" href="DayTrader/README.md">readme</a>
+      <a class="lnk" href="DayTrader/desk/PM_PLAYBOOK.md">playbook</a>
+      <a class="lnk" href="DayTrader/desk/DEBRIEF.md">debrief</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <span class="n">02</span>
+      <h2>ML RESEARCHER</h2>
+      <div class="role">Pretraining team &middot; a five-day research week</div>
+    </div>
+    <div class="card-bd">
+      <p class="premise">Recommend at most four of eight interventions for a 70B run. Every experiment
+        you can afford is at least an order of magnitude below the scale you are deciding for.</p>
+      <div class="enemy"><span class="k">THE ENEMY</span><span class="v">scale extrapolation — the best
+        cheap result is worth nothing at size</span></div>
+      <table class="facts">
+        <tr><td class="k">Budget</td><td class="v">6,000 GPU-hours &middot; 4 slots</td></tr>
+        <tr><td class="k">Span</td><td class="v">5 days &times; 10 h</td></tr>
+        <tr><td class="k">Decide for</td><td class="v">70B &mdash; where you have no data</td></tr>
+        <tr><td class="k">Mandatory</td><td class="v">a predicted effect + CI per run</td></tr>
+      </table>
+      <p class="gates">GATES &rarr; <b>Monday plan</b> &middot; <b>Wednesday midweek</b> &middot; <b>Friday readout</b></p>
+    </div>
+    <div class="card-ft">
+      <a class="btn" href="MLResearcher/index.html">LAUNCH &rarr;</a>
+      <a class="lnk" href="MLResearcher/README.md">readme</a>
+      <a class="lnk" href="MLResearcher/lead/RESEARCH_LEAD_PLAYBOOK.md">playbook</a>
+      <a class="lnk" href="MLResearcher/lead/DEBRIEF.md">debrief</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <span class="n">03</span>
+      <h2>PRODUCT MANAGER</h2>
+      <div class="role">B2B SaaS &middot; one full quarter</div>
+    </div>
+    <div class="card-bd">
+      <p class="premise">Ten features, seven ways of finding out what is true, and five people who all
+        want different things and none of whom reports to you. Unfinished work is worth exactly zero.</p>
+      <div class="enemy"><span class="k">THE ENEMY</span><span class="v">bias — every instrument lies
+        in a knowable direction</span></div>
+      <table class="facts">
+        <tr><td class="k">Capacity</td><td class="v">48 eng-weeks</td></tr>
+        <tr><td class="k">Span</td><td class="v">12 weeks</td></tr>
+        <tr><td class="k">Held to</td><td class="v">activation 31.4 &rarr; 40.0</td></tr>
+        <tr><td class="k">Second score</td><td class="v">trust &mdash; below 40 caps your grade</td></tr>
+      </table>
+      <p class="gates">GATES &rarr; <b>roadmap</b> &middot; <b>midquarter</b> &middot; <b>ship-or-cut</b> &middot; <b>QBR</b></p>
+    </div>
+    <div class="card-ft">
+      <a class="btn" href="ProductManager/index.html">LAUNCH &rarr;</a>
+      <a class="lnk" href="ProductManager/README.md">readme</a>
+      <a class="lnk" href="ProductManager/org/STAKEHOLDER_PLAYBOOK.md">playbook</a>
+      <a class="lnk" href="ProductManager/org/DEBRIEF.md">debrief</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <span class="n">04</span>
+      <h2>JUNIOR ENGINEER <span style="color:var(--warn);font-size:12px">(PRE-AI)</span></h2>
+      <div class="role">Dispatch team &middot; your first sprint</div>
+    </div>
+    <div class="card-bd">
+      <p class="premise">Six tickets in 412k lines you did not write. Two of them look identical on the
+        board; one is sitting in the code and the other is only in your mentor's head.</p>
+      <div class="enemy"><span class="k">THE ENEMY</span><span class="v">not knowing what you don't
+        know &mdash; and what asking costs</span></div>
+      <table class="facts">
+        <tr><td class="k">Focus time</td><td class="v">60 h over 10 days</td></tr>
+        <tr><td class="k">Real budget</td><td class="v">Deepa's 10 hours</td></tr>
+        <tr><td class="k">Gate to ship</td><td class="v">understanding, not time</td></tr>
+        <tr><td class="k">Mandatory</td><td class="v">an estimate before you start</td></tr>
+      </table>
+      <p class="gates">GATES &rarr; <b>kickoff</b> &middot; <b>standup</b> &middot; <b>1:1</b> &middot; <b>retro</b></p>
+    </div>
+    <div class="card-ft">
+      <a class="btn" href="JuniorEngineer/index.html">LAUNCH &rarr;</a>
+      <a class="lnk" href="JuniorEngineer/README.md">readme</a>
+      <a class="lnk" href="JuniorEngineer/squad/MENTOR_PLAYBOOK.md">playbook</a>
+      <a class="lnk" href="JuniorEngineer/squad/DEBRIEF.md">debrief</a>
+    </div>
+  </div>
+
+</div>
+
+<div class="how">
+  <h3>HOW EACH ONE RUNS</h3>
+  <ol>
+    <li><b>Open it and read the brief.</b> The start button is at the bottom of that screen.</li>
+    <li><b>The first gate fires immediately</b> and asks you to post a plan. Bring it to a Claude window
+        along with that sim's playbook &mdash; each playbook is written to work cold in a fresh session.</li>
+    <li><b>Work the session.</b> The clock runs, people interrupt, and nothing tells you whether you are
+        being careful or being stubborn.</li>
+    <li><b>At the last gate you paste a tearsheet</b> &mdash; the review, the readout, the QBR, the retro
+        &mdash; and get interrogated on your reasoning rather than your result.</li>
+    <li><b>Then the debrief reveals the ground truth</b> against what you actually did. That screen is the
+        product; everything before it exists to earn it.</li>
+  </ol>
+  <p style="color:var(--dim);margin:11px 0 0">
+    In three of the four I do <b style="color:var(--tx)">not</b> know the ground truth during the gates and
+    will not pretend to &mdash; I reason only from the evidence you put in front of me.
+  </p>
+</div>
+
+<div class="note">
+  Everything runs offline from <code>file://</code>. No build step, no server, no network. Progress persists
+  in browser localStorage, so you can close a tab and come back to it.
+  &nbsp;&middot;&nbsp; Component previews with synthetic data:
+  <a class="lnk" href="JuniorEngineer/tools/board_preview.html?case=plateau">board</a> &middot;
+  <a class="lnk" href="MLResearcher/tools/plots_preview.html">plots</a> &middot;
+  <a class="lnk" href="ProductManager/tools/viz_preview.html">viz</a> &middot;
+  <a class="lnk" href="DayTrader/tools/chart_preview.html">chart</a>
+</div>
+
+</body>
+</html>

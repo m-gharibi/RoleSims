@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>chart.js preview harness — Day Trader Sim</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#c9d1d9;
+    --dim:#8b949e; --green:#3fb950; --red:#f85149; --amber:#d29922; --cyan:#39c5cf;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:12px/1.45 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums;
+    display:flex; flex-direction:column; gap:8px; padding:10px;
+  }
+  h1{font-size:12px;margin:0;color:var(--dim);font-weight:400;letter-spacing:.06em}
+  h1 b{color:var(--cyan);font-weight:600}
+  .bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+       background:var(--panel);border:1px solid var(--border);padding:7px 8px}
+  button{
+    background:#1c2128;color:var(--text);border:1px solid var(--border);
+    font:inherit;padding:3px 9px;cursor:pointer
+  }
+  button:hover{border-color:var(--cyan);color:var(--cyan)}
+  button.on{border-color:var(--cyan);color:var(--cyan);background:#132b2e}
+  .sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+  label{color:var(--dim)}
+  input[type=range]{width:220px;vertical-align:middle}
+  .stat{color:var(--dim)}
+  .stat b{color:var(--text);font-weight:600}
+  #wrap{flex:1;min-height:320px;border:1px solid var(--border);background:var(--panel);position:relative}
+  canvas{display:block;width:100%;height:100%}
+  .note{color:#6e7681}
+  .g{color:var(--green)} .r{color:var(--red)} .a{color:var(--amber)}
+</style>
+</head>
+<body>
+
+<h1><b>chart.js</b> preview harness &mdash; synthetic data, no data/days.js dependency
+  <span class="note">&nbsp;|&nbsp; hover the chart for the crosshair readout</span></h1>
+
+<div class="bar">
+  <button id="b-100">&lt;&lt; -10</button>
+  <button id="b-1">&lt; -1</button>
+  <button id="play">&#9654; play</button>
+  <button id="f1">+1 &gt;</button>
+  <button id="f10">+10 &gt;&gt;</button>
+  <div class="sep"></div>
+  <label>upto</label>
+  <input type="range" id="slider" min="-1" max="1" value="0">
+  <span class="stat">idx <b id="idx">0</b> / <b id="max">0</b> &nbsp; <b id="clock">--:--</b>
+    &nbsp; last <b id="last">--</b></span>
+  <div class="sep"></div>
+  <label>window</label>
+  <button class="win" data-w="60">60</button>
+  <button class="win" data-w="120">120</button>
+  <button class="win" data-w="240">240</button>
+  <button class="win" data-w="390">390</button>
+</div>
+
+<div class="bar">
+  <label>overlays</label>
+  <button class="ov" data-o="vwap">VWAP</button>
+  <button class="ov" data-o="ema9">EMA9</button>
+  <button class="ov" data-o="ema20">EMA20</button>
+  <div class="sep"></div>
+  <button id="t-mark">markers</button>
+  <button id="t-lev">levels</button>
+  <button id="t-pos">position</button>
+  <div class="sep"></div>
+  <label>degenerate cases</label>
+  <button class="deg" data-d="normal">normal</button>
+  <button class="deg" data-d="empty">0 bars</button>
+  <button class="deg" data-d="one">1 bar</button>
+  <button class="deg" data-d="zero">upto=0</button>
+  <button class="deg" data-d="flat">flat OHLC</button>
+  <button class="deg" data-d="novol">no volume</button>
+  <button class="deg" data-d="holes">NaN holes</button>
+  <div class="sep"></div>
+  <button id="stress">stress 2/s &times;60</button>
+  <span class="stat" id="perf"></span>
+</div>
+
+<div id="wrap"><canvas id="cv"></canvas></div>
+
+<div class="bar note">
+  Integrity check: the price axis, the volume scale and every drawn pixel come only from
+  bars[0..upto]. Step back with <b>-10</b> and confirm the axis re-scales to the past
+  &mdash; if the future were leaking, the axis range would not change.
+  &nbsp;<span id="range" class="stat"></span>
+</div>
+
+<script src="../sim/chart.js"></script>
+<script>
+/* ------------------------------------------------------------------ *
+ * Deterministic synthetic intraday tape: ~60 pre-market + 190 RTH bars
+ * ------------------------------------------------------------------ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function clock(m){var h=Math.floor(m/60),r=m%60;return (h<10?'0':'')+h+':'+(r<10?'0':'')+r;}
+
+function makeDay(){
+  var rnd=mulberry32(20260816), bars=[], px=178.40, i;
+
+  /* pre-market: sparse (every 2 min), thin volume, drifting up = gap */
+  for(i=0;i<60;i++){
+    var m=450+i*2;
+    px += (rnd()-0.44)*0.09;
+    bars.push(mkBar(m,px,rnd,18000,false));
+    px = bars[bars.length-1].c;
+  }
+  /* RTH: opening drive, midday chop, afternoon trend */
+  px = 181.30;
+  for(i=0;i<190;i++){
+    var mm=570+i, drift;
+    if(i<25)      drift = 0.055;                       /* opening drive up  */
+    else if(i<60) drift = -0.045;                      /* fade              */
+    else if(i<120)drift = 0.004*Math.sin(i/9);         /* chop              */
+    else          drift = 0.032;                       /* afternoon trend   */
+    px += drift + (rnd()-0.5)*0.16;
+    var vbase = i<20 ? 900000 : (i<60 ? 420000 : (i<130 ? 180000 : 300000));
+    bars.push(mkBar(mm,px,rnd,vbase,true));
+    px = bars[bars.length-1].c;
+  }
+  return bars;
+}
+function mkBar(m,open,rnd,vbase,rth){
+  var body=(rnd()-0.5)*0.22, c=open+body;
+  var hi=Math.max(open,c)+rnd()*0.11, lo=Math.min(open,c)-rnd()*0.11;
+  return { m:m, t:clock(m),
+           o:+open.toFixed(2), h:+hi.toFixed(2), l:+lo.toFixed(2), c:+c.toFixed(2),
+           v:Math.round(vbase*(0.55+rnd()*0.95)), rth:rth };
+}
+
+var FULL = makeDay();
+
+/* ------------------------------------------------------------------ */
+var cv    = document.getElementById('cv');
+var chart = Chart.create(cv, { theme:'dark' });
+
+var S = {
+  bars: FULL, upto: 150, win: 120,
+  ov: { vwap:true, ema9:true, ema20:true },
+  markers:true, levels:true, position:true, mode:'normal'
+};
+
+var MARKERS = [
+  { m:578, px:181.55, side:'BUY',  qty:200 },
+  { m:596, px:182.95, side:'SELL', qty:200 },
+  { m:634, px:181.10, side:'BUY',  qty:300 },
+  { m:651, px:180.42, side:'SELL', qty:300 },
+  { m:700, px:180.90, side:'BUY',  qty:400 },
+  { m:742, px:182.30, side:'SELL', qty:200 }
+];
+var LEVELS = [
+  { px:178.40, label:'PC',      color:'#8b949e' },
+  { px:182.10, label:'PM HI',   color:'#d29922' },
+  { px:176.90, label:'PM LO',   color:'#d29922' },
+  { px:181.30, label:'OPEN',    color:'#39c5cf' },
+  { px:999.00, label:'ABSURD',  color:'#f85149' }   /* must not crush the scale */
+];
+var POSITION = { shares:200, avgPx:180.90 };
+
+function barsFor(mode){
+  if(mode==='empty') return [];
+  if(mode==='one')   return [FULL[100]];
+  if(mode==='flat'){
+    return FULL.slice(0,80).map(function(b){
+      return { m:b.m, t:b.t, o:180, h:180, l:180, c:180, v:b.v, rth:b.rth };
+    });
+  }
+  if(mode==='novol'){
+    return FULL.map(function(b){
+      var n={}; for(var k in b) n[k]=b[k]; delete n.v; return n;
+    });
+  }
+  if(mode==='holes'){
+    return FULL.map(function(b,i){
+      if(i%37===11) return { m:b.m, t:b.t, o:NaN, h:NaN, l:NaN, c:NaN, v:NaN, rth:b.rth };
+      if(i%53===7)  return { m:b.m, t:b.t, c:b.c, rth:b.rth };      /* c only */
+      return b;
+    });
+  }
+  return FULL;
+}
+
+function cfg(){
+  var bars = barsFor(S.mode);
+  var upto = S.mode==='zero' ? 0 : Math.min(S.upto, bars.length-1);
+  var ov=[]; if(S.ov.vwap)ov.push('vwap'); if(S.ov.ema9)ov.push('ema9'); if(S.ov.ema20)ov.push('ema20');
+  return {
+    bars: bars, upto: upto, window: S.win, openM: 570, overlays: ov,
+    levels:   S.levels   ? LEVELS   : [],
+    markers:  S.markers  ? MARKERS  : [],
+    position: S.position ? POSITION : null
+  };
+}
+
+function paint(){
+  var c = cfg();
+  chart.render(c);
+  var b = c.bars[c.upto];
+  document.getElementById('idx').textContent   = c.upto;
+  document.getElementById('max').textContent   = c.bars.length-1;
+  document.getElementById('clock').textContent = b ? b.t : '--:--';
+  var lastEl = document.getElementById('last');
+  lastEl.textContent = b && isFinite(b.c) ? b.c.toFixed(2) : '--';
+  lastEl.className = b && isFinite(b.c) && isFinite(b.o) ? (b.c>=b.o?'g':'r') : '';
+  var sl = document.getElementById('slider');
+  sl.min=-1; sl.max=Math.max(0,c.bars.length-1); sl.value=c.upto;
+  var g = chart.getGeom();
+  document.getElementById('range').textContent = g
+    ? 'axis ['+g.lo.toFixed(2)+' .. '+g.hi.toFixed(2)+']  visible '+g.start+'..'+g.upto+
+      '  vmax '+Math.round(g.vmax)
+    : '';
+  syncButtons();
+}
+
+function syncButtons(){
+  [].forEach.call(document.querySelectorAll('.win'), function(b){
+    b.classList.toggle('on', +b.dataset.w===S.win); });
+  [].forEach.call(document.querySelectorAll('.ov'), function(b){
+    b.classList.toggle('on', !!S.ov[b.dataset.o]); });
+  [].forEach.call(document.querySelectorAll('.deg'), function(b){
+    b.classList.toggle('on', b.dataset.d===S.mode); });
+  document.getElementById('t-mark').classList.toggle('on', S.markers);
+  document.getElementById('t-lev').classList.toggle('on', S.levels);
+  document.getElementById('t-pos').classList.toggle('on', S.position);
+}
+
+function step(d){
+  var n = barsFor(S.mode).length;
+  S.upto = Math.max(-1, Math.min(S.upto+d, n-1));
+  paint();
+}
+
+document.getElementById('b-100').onclick=function(){step(-10);};
+document.getElementById('b-1').onclick  =function(){step(-1);};
+document.getElementById('f1').onclick   =function(){step(1);};
+document.getElementById('f10').onclick  =function(){step(10);};
+document.getElementById('slider').oninput=function(){S.upto=+this.value;paint();};
+[].forEach.call(document.querySelectorAll('.win'),function(b){
+  b.onclick=function(){S.win=+b.dataset.w;paint();};});
+[].forEach.call(document.querySelectorAll('.ov'),function(b){
+  b.onclick=function(){S.ov[b.dataset.o]=!S.ov[b.dataset.o];paint();};});
+[].forEach.call(document.querySelectorAll('.deg'),function(b){
+  b.onclick=function(){S.mode=b.dataset.d;
+    if(S.mode==='one')S.upto=0; if(S.mode==='zero')S.upto=0;
+    if(S.mode==='normal'||S.mode==='novol'||S.mode==='holes')S.upto=Math.min(150,barsFor(S.mode).length-1);
+    paint();};});
+document.getElementById('t-mark').onclick=function(){S.markers=!S.markers;paint();};
+document.getElementById('t-lev').onclick =function(){S.levels=!S.levels;paint();};
+document.getElementById('t-pos').onclick =function(){S.position=!S.position;paint();};
+
+/* play: 1 bar every 500ms, i.e. the real ~2 renders/second the spec calls for */
+var timer=null;
+document.getElementById('play').onclick=function(){
+  if(timer){clearInterval(timer);timer=null;this.textContent='▶ play';this.classList.remove('on');return;}
+  this.textContent='■ stop'; this.classList.add('on');
+  timer=setInterval(function(){
+    var n=barsFor(S.mode).length;
+    if(S.upto>=n-1){S.upto=Math.max(-1,Math.min(60,n-1));}else{S.upto++;}
+    paint();
+  },500);
+};
+
+/* crude perf probe: 60 renders back to back, report ms/frame */
+document.getElementById('stress').onclick=function(){
+  var t0=performance.now();
+  for(var i=0;i<60;i++){ S.upto = 200 - (i%50); chart.render(cfg()); }
+  var dt=performance.now()-t0;
+  document.getElementById('perf').textContent=
+    '60 renders in '+dt.toFixed(1)+'ms  ('+(dt/60).toFixed(2)+' ms/frame)';
+  S.upto=150; paint();
+};
+
+document.onkeydown=function(e){
+  if(e.key==='ArrowRight')step(e.shiftKey?10:1);
+  else if(e.key==='ArrowLeft')step(e.shiftKey?-10:-1);
+};
+
+window.addEventListener('resize',function(){chart.resize();});
+paint();
+</script>
+</body>
+</html>

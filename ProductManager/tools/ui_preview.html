@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Manager — UI PREVIEW (mock modules)</title>
+<link rel="stylesheet" href="../sim/ui.css">
+<style>
+  /* preview-only chrome so nobody mistakes this for the real app */
+  #preview-tag {
+    position: fixed; top: 0; right: 0; z-index: 500;
+    background: #d29922; color: #0d1117; font: 700 9px/1 ui-monospace, Menlo, monospace;
+    letter-spacing: .16em; padding: 4px 8px; border-bottom-left-radius: 4px;
+    pointer-events: none; opacity: .85;
+  }
+  #diag-out {
+    position: fixed; left: 0; bottom: 0; z-index: 400; max-height: 46vh; overflow: auto;
+    background: #0b0f14; color: #c9d1d9; font: 10px/1.5 ui-monospace, Menlo, monospace;
+    border-top: 1px solid #30363d; padding: 8px 12px; margin: 0; width: 100%;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<div id="preview-tag">UI PREVIEW · MOCK PRODUCT/VIZ/ORG</div>
+
+<div id="pms-boot" style="padding:40px 32px;font:13px ui-monospace,Menlo,monospace;color:#8b949e">
+  booting preview…
+</div>
+
+<script>
+/* capture everything the page complains about, before anything else loads */
+window.__ERRORS__ = [];
+window.addEventListener('error', function (e) {
+  window.__ERRORS__.push('error: ' + e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno);
+});
+window.addEventListener('unhandledrejection', function (e) {
+  window.__ERRORS__.push('unhandled rejection: ' + (e.reason && e.reason.message || e.reason));
+});
+(function () {
+  var ce = console.error;
+  console.error = function () {
+    window.__ERRORS__.push('console.error: ' + Array.prototype.join.call(arguments, ' '));
+    ce.apply(console, arguments);
+  };
+})();
+</script>
+
+<!-- REAL data, MOCK modules.
+     ui_mocks.js defines window.Product, window.Viz and window.Org, replacing
+     sim/product.js + sim/viz.js + sim/org.js. Only sim/ui.js and sim/ui.css
+     below are the real product files. -->
+<script src="../data/company.js"></script>
+<script src="ui_mocks.js"></script>
+<script src="../sim/ui.js"></script>
+
+<script>
+/* --------------------------------------------------------------------------
+   PREVIEW-ONLY test driver. Does nothing unless you add a hash to the URL:
+
+     ui_preview.html                -> normal manual preview (brief screen)
+     ui_preview.html#auto=brief     -> the brief
+     ui_preview.html#auto=desk      -> desk, ~6 weeks in, research + commits
+     ui_preview.html#auto=caveat    -> desk with an instrument picked, caveat showing
+     ui_preview.html#auto=commit    -> desk + the commit dialog open
+     ui_preview.html#auto=drop      -> desk + the drop dialog open
+     ui_preview.html#auto=over      -> desk with capacity over-committed (alarm state)
+     ui_preview.html#auto=gate      -> desk + the mid-quarter gate modal
+     ui_preview.html#auto=qbr       -> the QBR screen, filled in
+     ui_preview.html#auto=debrief   -> the debrief, after a submitted QBR
+     ui_preview.html#auto=diag      -> desk + a layout/console dump in <pre id="diag-out">
+
+   It only drives the same controls a human would.
+   -------------------------------------------------------------------------- */
+(function () {
+  setTimeout(function () {
+    if (!document.getElementById('preview-tag')) {
+      var t = document.createElement('div');
+      t.id = 'preview-tag';
+      t.textContent = 'UI PREVIEW · MOCK PRODUCT/VIZ/ORG';
+      document.body.appendChild(t);
+    }
+  }, 60);
+
+  var m = /auto=([a-z]+)/.exec(location.hash || '');
+  if (!m) return;
+  var target = m[1];
+
+  var log = function (s) { console.log('[driver] ' + s); };
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var $ = function (s) { return document.querySelector(s); };
+  var click = function (sel) {
+    var e = typeof sel === 'string' ? $(sel) : sel;
+    if (e) { e.click(); return true; }
+    log('MISSING ' + sel);
+    window.__ERRORS__.push('driver: missing selector ' + sel);
+    return false;
+  };
+  var setVal = function (sel, v) {
+    var e = $(sel);
+    if (!e) { window.__ERRORS__.push('driver: missing input ' + sel); return; }
+    e.value = v;
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  var UI = function () { return window.__PMS_UI__; };
+
+  async function enterDesk() {
+    click('#br-start');
+    await sleep(120);
+    click('.modal [data-ok]');            // week-1 roadmap gate
+    await sleep(80);
+    if ($('#h-pause') && $('#h-pause').textContent === 'PAUSE') click('#h-pause');
+    await sleep(40);
+  }
+
+  async function doResearch(fid, iid) {
+    UI().setResearch(fid, iid, false);
+    await sleep(30);
+    var ack = $('#rs-ack');
+    if (ack) { ack.checked = true; ack.dispatchEvent(new Event('change', { bubbles: true })); }
+    await sleep(20);
+    click('#rs-run');
+    await sleep(40);
+  }
+
+  async function doCommit(fid, impact, rationale) {
+    UI().openCommit(fid);
+    await sleep(60);
+    setVal('#cm-impact', String(impact));
+    setVal('#cm-rat', rationale);
+    await sleep(20);
+    click('.modal [data-ok]');
+    await sleep(40);
+  }
+
+  function advance(n) {
+    try { window.Product.advance(n); } catch (e) { window.__ERRORS__.push('advance threw: ' + e.message); }
+    try { UI().refresh(); } catch (e) {}
+    var ok = document.querySelector('.modal.gate [data-ok]');
+    if (ok) ok.click();
+  }
+
+  async function playSome() {
+    await enterDesk();
+    await doResearch('onboarding_checklist', 'interviews');
+    await doResearch('sso_scim', 'sales_anecdote');
+    advance(6);
+    await doCommit('onboarding_checklist', 3.5,
+      'Interviews and the empty-state complaints both point here. Cheapest thing on the board that touches activation directly.');
+    advance(8);
+    await doResearch('dashboard_themes', 'survey');
+    await doResearch('perf_p95_latency', 'support_tickets');
+    advance(10);
+    await doCommit('perf_p95_latency', 2.0,
+      'Top ticket driver per support, and Rina has wanted it for two quarters. Boring, real, and she will tell me the truth about the estimate.');
+    advance(8);
+    await sleep(60);
+    dismissGate();
+    await sleep(40);
+  }
+
+  /* gates fire on their own as the weeks pass — clear any that are open */
+  function dismissGate() {
+    var ok = $('.modal.gate [data-ok]');
+    if (ok) { ok.click(); log('dismissed a gate'); }
+  }
+
+  function dumpDiag() {
+    var L = [];
+    var pad = function (s, n) { s = String(s); while (s.length < n) s += ' '; return s; };
+    L.push('viewport ' + window.innerWidth + 'x' + window.innerHeight +
+           '  doc ' + document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight);
+    var vScroll = document.documentElement.scrollHeight > window.innerHeight + 1;
+    var hScroll = document.documentElement.scrollWidth > window.innerWidth + 1;
+    L.push('PAGE SCROLL: vertical=' + (vScroll ? 'YES (BAD)' : 'no') + '  horizontal=' + (hScroll ? 'YES (BAD)' : 'no'));
+    L.push('');
+    ['.hdr', '.p-board', '.p-viz', '.p-research', '.p-roadmap', '.p-gantt', '.p-order', '.p-feed']
+      .forEach(function (sel) {
+        var e = $(sel);
+        if (!e) { L.push(pad(sel, 14) + ' MISSING'); return; }
+        var r = e.getBoundingClientRect();
+        var overflow = '';
+        if (e.scrollHeight > e.clientHeight + 2) overflow += ' scrollY(' + e.scrollHeight + '>' + e.clientHeight + ')';
+        if (e.scrollWidth > e.clientWidth + 2) overflow += ' scrollX(' + e.scrollWidth + '>' + e.clientWidth + ')';
+        var clipped = (r.bottom > window.innerHeight + 1 || r.right > window.innerWidth + 1) ? '  CLIPPED' : '';
+        L.push(pad(sel, 14) + pad(Math.round(r.left) + ',' + Math.round(r.top), 12) +
+               pad(Math.round(r.width) + 'x' + Math.round(r.height), 12) + overflow + clipped);
+      });
+    L.push('');
+    /* the research caveat must be visible without scrolling the panel */
+    var cav = $('#rs-cav .caveat');
+    if (cav) {
+      var cr = cav.getBoundingClientRect();
+      var pr = $('.p-research').getBoundingClientRect();
+      L.push('CAVEAT visible-in-panel: ' +
+        (cr.top >= pr.top - 1 && cr.bottom <= pr.bottom + 1 ? 'YES' : 'NO (BAD)') +
+        '  rect ' + Math.round(cr.width) + 'x' + Math.round(cr.height));
+      L.push('CAVEAT text: ' + ($('#rs-cav .cav-tx') || {}).textContent);
+    } else L.push('CAVEAT: not rendered');
+    var run = $('#rs-run');
+    if (run) L.push('RUN BUTTON: "' + run.textContent + '" disabled=' + run.disabled);
+    var cw = $('#h-capwarn');
+    if (cw) L.push('CAPACITY WARN: "' + cw.textContent + '" over-class=' + ($('#h-cap').classList.contains('is-over')));
+    var canv = document.querySelectorAll('canvas');
+    L.push('canvases: ' + canv.length + ' ' + Array.prototype.map.call(canv, function (c) {
+      return c.id + '(' + c.width + 'x' + c.height + ')';
+    }).join(' '));
+    L.push('');
+    L.push('ERRORS (' + window.__ERRORS__.length + '):');
+    window.__ERRORS__.forEach(function (e) { L.push('  ' + e); });
+    var pre = document.createElement('pre');
+    pre.id = 'diag-out';
+    pre.textContent = L.join('\n');
+    document.body.appendChild(pre);
+    console.log('[diag]\n' + L.join('\n'));
+  }
+
+  setTimeout(async function () {
+    try {
+      if (target === 'brief') { /* nothing to do */ }
+      else if (target === 'caveat') {
+        await enterDesk();
+        advance(9);
+        UI().setResearch('onboarding_checklist', 'support_tickets', false);
+      }
+      else if (target === 'commit') {
+        await playSome();
+        UI().openCommit('realtime_collab');
+      }
+      else if (target === 'drop') {
+        await playSome();
+        UI().openDrop('perf_p95_latency');
+      }
+      else if (target === 'over') {
+        await enterDesk();
+        advance(30);
+        await doCommit('realtime_collab', 4.0, 'The CEO wants it and Kestrel shipped theirs. Ten weeks, allegedly.');
+        await doCommit('mobile_view', 2.5, 'Design and the CEO both want it and I have not found a way to say no yet.');
+        await doCommit('template_gallery', 3.0, 'Pairs with onboarding. If the checklist lands this compounds with it.');
+        await doCommit('sso_scim', 1.0, 'Northwind is 180k and Dan has asked four times. Revenue, not activation.');
+      }
+      else if (target === 'gate') {
+        await playSome();
+        UI().gate('midqtr');
+      }
+      else if (target === 'qbr' || target === 'debrief') {
+        await playSome();
+        advance(60);
+        await sleep(120);
+        if (!document.getElementById('scr-qbr').classList.contains('active')) UI().goQBR();
+        await sleep(80);
+        setVal('#qb-narr',
+          'I bet the quarter on activation and treated every other ask as a revenue problem wearing an ' +
+          'activation costume. Onboarding checklist first because interviews and the empty-state complaints ' +
+          'agreed and nothing else did. Latency second because support was the one instrument measuring ' +
+          'something it can actually see. I said no to SSO on the metric and yes to it on the revenue roadmap, ' +
+          'and I told Dan that on the day rather than in week eleven. What I got wrong: I ran the survey on ' +
+          'themes and it told me exactly what stated preference always tells you.');
+        setVal('#qb-claim', '5.5');
+        if (target === 'debrief') {
+          await sleep(60);
+          click('#qb-submit');
+          await sleep(700);
+          click('.modal [data-ok]');   /* the week-12 QBR gate lands on the debrief */
+          await sleep(120);
+        }
+      }
+      else { /* desk, diag */
+        await playSome();
+      }
+      await sleep(260);
+      if (target === 'diag') dumpDiag();
+      window.__DRIVER_DONE__ = true;
+      log('done: ' + target);
+    } catch (e) {
+      window.__ERRORS__.push('driver threw: ' + e.message);
+      window.__DRIVER_DONE__ = true;
+      console.error('[driver] threw', e);
+    }
+  }, 220);
+})();
+</script>
+
+</body>
+</html>

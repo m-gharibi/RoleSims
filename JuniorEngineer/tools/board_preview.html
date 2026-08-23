@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Board preview — Junior Engineer sim</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#c9d1d9;--dim:#8b949e;
+        --good:#3fb950;--bad:#f85149;--warn:#d29922;--accent:#39c5cf;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums;}
+  .bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;
+       border-bottom:1px solid var(--border);background:var(--panel);}
+  .bar b{color:var(--dim);font-weight:normal;margin-right:4px;}
+  button{background:#1c232c;color:var(--text);border:1px solid var(--border);
+         padding:4px 9px;font:inherit;cursor:pointer;border-radius:3px;}
+  button:hover{border-color:var(--accent);}
+  button.on{border-color:var(--accent);color:var(--accent);background:#132027;}
+  button.hot{border-color:var(--warn);color:var(--warn);}
+  button.hot.on{background:#241d0d;}
+  .grid{padding:8px;display:flex;flex-direction:column;gap:8px;}
+  .row{display:flex;gap:8px;}
+  .cell{background:var(--panel);border:1px solid var(--border);border-radius:4px;
+        padding:4px;display:flex;flex-direction:column;min-width:0;}
+  .cell h2{margin:0 0 3px 2px;font-size:9px;letter-spacing:.09em;color:var(--dim);
+           font-weight:normal;text-transform:uppercase;}
+  canvas{display:block;width:100%;background:var(--bg);border-radius:2px;}
+  #status{margin-left:auto;color:var(--dim);}
+  #status.err{color:var(--bad);}
+  body.tiny canvas{width:96px !important;height:44px !important;}
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>case</b>
+  <button data-v="normal">normal sprint</button>
+  <button data-v="plateau" class="hot">THE PLATEAU CASE</button>
+  <button data-v="early">day 1 (almost nothing)</button>
+  <b>degenerate</b>
+  <button data-v="empty">no tickets</button>
+  <button data-v="zero">zero hours</button>
+  <button data-v="nohist">empty history</button>
+  <button data-v="single">single point</button>
+  <button data-v="uipayload">ui.js payload shape</button>
+  <button data-v="nan">NaN / junk</button>
+  <button data-v="tiny">near-zero canvas</button>
+  <span id="status">—</span>
+</div>
+
+<div class="grid">
+  <div class="row">
+    <div class="cell" style="flex:1"><h2>timeline() — where the hours went</h2>
+      <canvas id="c-timeline" style="height:292px"></canvas></div>
+  </div>
+  <div class="row">
+    <div class="cell" style="flex:1.35"><h2>understanding() — <span id="uName">—</span></h2>
+      <canvas id="c-understanding" style="height:256px"></canvas></div>
+    <div class="cell" style="flex:1"><h2>burn()</h2>
+      <canvas id="c-burn" style="height:256px"></canvas></div>
+    <div class="cell" style="flex:0.85"><h2>trust()</h2>
+      <canvas id="c-trust" style="height:256px"></canvas></div>
+  </div>
+  <div class="row">
+    <div class="cell" style="flex:1"><h2>truth() — debrief only</h2>
+      <canvas id="c-truth" style="height:292px"></canvas></div>
+  </div>
+</div>
+
+<script src="../sim/board.js"></script>
+<script>
+/* ===========================================================================
+ * Synthetic sprint. One clock, one person: every step is laid end to end, so
+ * `at` is the absolute sprint hour the action started. 10 days x 6h = 60h.
+ * ======================================================================== */
+var HPD = 6, DAYS = 10;
+
+var ACTIONS = [
+  {id:'reproduce',minutes:30},{id:'read_code',minutes:30},{id:'read_docs',minutes:20},
+  {id:'git_blame',minutes:15},{id:'search_slack',minutes:15},{id:'run_tests',minutes:15},
+  {id:'just_try',minutes:45}
+];
+
+var TICKETS = [
+  {id:'BUG-2201', points:3, title:'DST sort order'},
+  {id:'BUG-2207', points:3, title:'duplicate webhooks'},
+  {id:'FEAT-2189',points:2, title:'CSV export'},
+  {id:'BUG-2214', points:2, title:'flaky scheduling test'},
+  {id:'FEAT-2195',points:5, title:'API rate limiting'},
+  {id:'CHORE-2150',points:1,title:'shared lint preset'}
+];
+
+/* [ticket, actionId, minutes, gained, kind?, classification?, to?] */
+var SCRIPT = [
+  /* ---- D1 : the easy chore, then the DST bug ------------------------- */
+  ['CHORE-2150','read_docs',   20,  26],
+  ['CHORE-2150','just_try',    45,  34],
+  ['CHORE-2150','implement',   45,   0],
+  ['CHORE-2150','write_tests', 45,   0],
+  ['CHORE-2150','open_pr',      0,   0],
+  ['BUG-2201', 'reproduce',    30,  16],
+  ['BUG-2201', 'read_code',    30,  20],
+  ['BUG-2201', 'read_docs',    20, -12],
+  ['BUG-2201', 'read_code',    30,  12],
+  ['CHORE-2150','merge',        0,   0],
+
+  /* ---- D2 : blame finds the 2019 decision --------------------------- */
+  ['BUG-2201', 'git_blame',    15,  26],
+  ['BUG-2201', 'read_code',    30,   9],
+  ['BUG-2207', 'read_code',    30,  14],
+  ['BUG-2207', 'read_code',    30,   9],
+  ['BUG-2207', 'reproduce',    30,   0],
+  ['BUG-2214', 'reproduce',    30,  12],
+  ['BUG-2214', 'run_tests',    15,  16],
+  ['BUG-2214', 'run_tests',    15,   3],
+  ['BUG-2207', 'read_code',    30,   6],
+  ['BUG-2207', 'read_docs',    20,  -8],
+
+  /* ---- D3 : the webhook ticket starts to stall ----------------------- */
+  ['BUG-2207', 'run_tests',    15,   0],
+  ['BUG-2207', 'read_code',    30,   5],
+  ['BUG-2207', 'search_slack', 15,  11],
+  ['BUG-2201', 'implement',   120,   0],
+  ['BUG-2201', 'write_tests',  45,   0],
+  ['BUG-2201', 'open_pr',       0,   0],
+  ['BUG-2207', 'read_code',    30,   2],
+
+  /* ---- D4 : PR bounces, and the wiki starts lying about rate limits -- */
+  ['BUG-2207', 'just_try',     45,   0],
+  ['BUG-2201', 'git_blame',    15,  11],
+  ['BUG-2201', 'read_code',    30,   8],
+  ['BUG-2201', 'implement',    60,   0],
+  ['BUG-2201', 'open_pr',       0,   0],
+  ['BUG-2201', 'merge',         0,   0],
+  ['FEAT-2195','read_docs',    20, -10],
+  ['FEAT-2195','read_docs',    20,  -6],
+
+  /* ---- D5 : still reading the code that does not have the answer ----- */
+  ['BUG-2207', 'read_code',    30,   1],
+  ['BUG-2207', 'read_docs',    20,  -3],
+  ['BUG-2207', 'read_code',    30,   2],
+  ['BUG-2207', 'run_tests',    15,   0],
+  ['FEAT-2195','read_code',    30,   9],
+  ['FEAT-2195','just_try',     45,  -5],
+  ['FEAT-2189','read_code',    30,  18],
+  ['FEAT-2189','read_docs',    20,   9],
+
+  /* ---- D6 : one good ask, one that should have happened on day 2 ----- */
+  ['FEAT-2189','ask_hannah',   10,  30, 'ask', 'well-formed', 'hannah'],
+  ['FEAT-2189','read_code',    30,  14],
+  ['BUG-2207', 'read_code',    30,   0],
+  ['BUG-2207', 'just_try',     45,   1],
+  ['BUG-2214', 'read_code',    30,  14],
+  ['BUG-2214', 'git_blame',    15,  18],
+
+  /* ---- D7 : the flaky test ships ------------------------------------ */
+  ['BUG-2214', 'implement',    90,   0],
+  ['BUG-2214', 'write_tests',  45,   0],
+  ['BUG-2214', 'open_pr',       0,   0],
+  ['BUG-2214', 'merge',         0,   0],
+  ['BUG-2207', 'read_code',    30,   1],
+  ['FEAT-2195','read_docs',    20,  -4],
+  ['FEAT-2195','read_code',    30,   7],
+
+  /* ---- D8 : the CSV export goes to review, the webhook is still open - */
+  ['FEAT-2189','implement',    60,   0],
+  ['FEAT-2189','write_tests',  45,   0],
+  ['FEAT-2189','open_pr',       0,   0],
+  ['BUG-2207', 'read_code',    30,   0],
+  ['BUG-2207', 'run_tests',    15,   0],
+  ['FEAT-2195','ask_channel',  10,   4, 'ask', 'premature', 'channel'],
+  ['BUG-2207', 'read_code',    30,   1]
+];
+
+var MERGED = [];
+function buildSprint() {
+  var byId = {}, i;
+  MERGED.length = 0;
+  for (i = 0; i < TICKETS.length; i++) {
+    byId[TICKETS[i].id] = {
+      id: TICKETS[i].id, title: TICKETS[i].title, points: TICKETS[i].points,
+      status: 'todo', understanding: 0, hoursSpent: 0, estimateHours: 0, history: []
+    };
+  }
+  var at = 0;
+  for (i = 0; i < SCRIPT.length; i++) {
+    var s = SCRIPT[i], t = byId[s[0]];
+    var mins = s[2], gained = s[3];
+    var kind = s[4] || null;
+    var e = { actionId: s[1], minutes: mins, gained: gained, at: at };
+    if (kind) e.kind = kind;
+    if (s[5]) e.classification = s[5];
+    if (s[6]) e.to = s[6];
+    if (s[1] === 'merge') { e.kind = 'merge'; t.status = 'merged';
+      MERGED.push({ id: t.id, points: t.points, day: Math.floor(at / HPD) + 1 }); }
+    if (s[1] === 'open_pr') t.status = 'in_review';
+    if (s[1] === 'implement') t.status = 'implementing';
+    if (t.status === 'todo') t.status = 'investigating';
+    t.understanding = Math.max(0, Math.min(100, t.understanding + gained));
+    e.understanding = t.understanding;
+    t.hoursSpent += mins / 60;
+    t.history.push(e);
+    at += mins / 60;
+  }
+  byId['BUG-2201'].status = 'merged';
+  byId['BUG-2214'].status = 'merged';
+  byId['CHORE-2150'].status = 'merged';
+  byId['FEAT-2189'].status = 'in_review';
+  byId['FEAT-2195'].status = 'investigating';
+  byId['BUG-2207'].status = 'investigating';
+  var est = {'BUG-2201':4,'BUG-2207':3,'FEAT-2189':5,'BUG-2214':2,'FEAT-2195':8,'CHORE-2150':1};
+  var list = [];
+  for (i = 0; i < TICKETS.length; i++) {
+    var tk = byId[TICKETS[i].id];
+    tk.estimateHours = est[tk.id];
+    list.push(tk);
+  }
+  return { tickets: list, elapsed: at, byId: byId };
+}
+
+var SPRINT = buildSprint();
+
+var PEOPLE = [
+  { id:'deepa',  name:'Deepa Iyer',       role:'staff eng / buddy', trust:63, delta:+8 },
+  { id:'tobias', name:'Tobias Lindqvist', role:'tech lead',         trust:47, delta:-8 },
+  { id:'nnamdi', name:'Nnamdi Eze',       role:'reviewer',          trust:49, delta:-6 },
+  { id:'hannah', name:'Hannah Brecht',    role:'product',           trust:61, delta:+6 }
+];
+
+var BEST_PATHS = {
+  'BUG-2201':  ['reproduce','git_blame','read_code','implement','write_tests','open_pr'],
+  'BUG-2207':  ['reproduce','read_code','ask_deepa','implement','write_tests','open_pr'],
+  'FEAT-2189': ['ask_hannah','read_code','implement','write_tests','open_pr'],
+  'BUG-2214':  ['run_tests','reproduce','git_blame','implement','write_tests','open_pr'],
+  'FEAT-2195': ['ask_hannah','ask_deepa','read_code','implement','write_tests','open_pr'],
+  'CHORE-2150':['read_docs','just_try','implement','open_pr']
+};
+var TIMEBOX = {'BUG-2201':1.5,'BUG-2207':1.0,'FEAT-2189':0.75,'BUG-2214':1.5,'FEAT-2195':1.0,'CHORE-2150':1.0};
+var VERDICT = {'BUG-2201':'right','BUG-2207':'never','FEAT-2189':'late','BUG-2214':'right','FEAT-2195':'late','CHORE-2150':'right'};
+
+/* ---------------------------------------------------------------------- *
+ * The exact shapes sim/ui.js builds: an actionLog on `segments` (kind/action
+ * id/minutes/gained/atHours-on-ticket/"D4 11:15") and a SEPARATE understanding
+ * sample trace on `history` ({e,h,u,t,day}). board.js has to tell them apart.
+ * ---------------------------------------------------------------------------*/
+function stampOf(at) {
+  var d = Math.floor(at / HPD) + 1;
+  var clock = 9 + (at - (d - 1) * HPD);
+  var hh = Math.floor(clock), mm = Math.round((clock - hh) * 60);
+  if (mm === 60) { hh += 1; mm = 0; }
+  return { day: d, t: 'D' + d + ' ' + (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm };
+}
+function uiPayload() {
+  return SPRINT.tickets.map(function (t) {
+    var onTicket = 0, u = 0;
+    var segments = [], samples = [];
+    t.history.forEach(function (e) {
+      var st = stampOf(e.at);
+      var isAsk = e.kind === 'ask';
+      segments.push({
+        kind: isAsk ? 'ask' : (e.kind === 'merge' ? 'merge' : 'action'),
+        actionId: e.actionId, name: e.actionId,
+        minutes: e.minutes, gained: isAsk ? NaN : e.gained,
+        atHours: onTicket, t: st.t, day: st.day,
+        classification: e.classification || undefined
+      });
+      onTicket += e.minutes / 60;
+      u = e.understanding;
+      samples.push({ e: e.at + e.minutes / 60, h: onTicket, u: u, t: st.t, day: st.day });
+    });
+    return { id: t.id, title: t.title, type: 'bug', priority: 'P2', points: t.points,
+             status: t.status, understanding: u, hoursSpent: onTicket,
+             estimateHours: t.estimateHours, segments: segments, actions: segments,
+             history: samples };
+  });
+}
+
+function truthRows(tickets) {
+  var rows = [], i;
+  for (i = 0; i < tickets.length; i++) {
+    var t = tickets[i];
+    rows.push({
+      id: t.id, title: t.title, merged: t.status === 'merged',
+      route: t.history, best: BEST_PATHS[t.id],
+      hoursSpent: t.hoursSpent, timeboxHours: TIMEBOX[t.id], verdict: VERDICT[t.id]
+    });
+  }
+  return rows;
+}
+
+/* ---------------------------------------------------------------------- */
+var CANV = {}, BOARD = {};
+['timeline','understanding','burn','trust','truth'].forEach(function (k) {
+  CANV[k] = document.getElementById('c-' + k);
+});
+
+function sizeAll() {
+  var k;
+  for (k in CANV) {
+    var el = CANV[k];
+    el.style.width = '100%';
+    el.width = el.clientWidth; el.height = el.clientHeight;
+  }
+}
+
+function boards() {
+  var k;
+  for (k in CANV) if (!BOARD[k]) {
+    BOARD[k] = Board.create(CANV[k], {
+      theme: 'dark', actions: ACTIONS, days: DAYS, hoursPerDay: HPD,
+      implementReadyAt: 70, correctAt: 90, stuckHours: 3
+    });
+  }
+  return BOARD;
+}
+
+var variant = 'normal';
+
+function render() {
+  document.body.classList.toggle('tiny', variant === 'tiny');
+  var b = boards(), k;
+  for (k in BOARD) BOARD[k].resize();
+
+  var tickets = SPRINT.tickets, elapsed = SPRINT.elapsed;
+  var uTicket = SPRINT.byId['BUG-2201'];
+  var day = Math.min(DAYS, Math.floor(elapsed / HPD) + 1);
+  var people = PEOPLE, rows = truthRows(tickets);
+  var burnCfg = {
+    points: tickets, day: day, totalDays: DAYS,
+    merged: MERGED
+  };
+
+  if (variant === 'plateau') {
+    uTicket = SPRINT.byId['BUG-2207'];
+  } else if (variant === 'early') {
+    tickets = tickets.map(function (t) {
+      return { id:t.id, title:t.title, points:t.points, status:'todo',
+               understanding:0, hoursSpent:0, estimateHours:t.estimateHours, history:[] };
+    });
+    tickets[0].history = SPRINT.byId['BUG-2201'].history.slice(0, 2);
+    tickets[0].hoursSpent = 1; tickets[0].understanding = 36; tickets[0].status = 'investigating';
+    uTicket = tickets[0];
+    elapsed = 1; day = 1;
+    burnCfg = { points: tickets, day: 1, totalDays: DAYS, merged: [] };
+    rows = [];
+  } else if (variant === 'empty') {
+    tickets = []; people = []; rows = [];
+    uTicket = null; elapsed = 0; day = 1;
+    burnCfg = { points: [], day: 1, totalDays: DAYS, merged: [] };
+  } else if (variant === 'zero') {
+    tickets = TICKETS.map(function (t) {
+      return { id:t.id, title:t.title, points:t.points, status:'todo',
+               understanding:0, hoursSpent:0, estimateHours:0, history:[] };
+    });
+    uTicket = tickets[0]; elapsed = 0; day = 1;
+    people = PEOPLE.map(function (p) { return { id:p.id, name:p.name, role:p.role, trust:55, delta:0 }; });
+    burnCfg = { points: 0, day: 0, totalDays: DAYS, merged: [] };
+    rows = tickets.map(function (t) { return { id:t.id, merged:false, route:[], best:[], hoursSpent:0 }; });
+  } else if (variant === 'nohist') {
+    tickets = TICKETS.map(function (t, i) {
+      return { id:t.id, title:t.title, points:t.points, status:'investigating',
+               understanding:20 + i * 6, hoursSpent:2 + i, estimateHours:3 };
+    });
+    uTicket = tickets[2];
+    burnCfg = { points: tickets, day: 5, totalDays: DAYS, merged: [] };
+    rows = tickets.map(function (t) { return { id:t.id, merged:false, hoursSpent:t.hoursSpent, best:BEST_PATHS[t.id] }; });
+  } else if (variant === 'single') {
+    uTicket = { id:'BUG-2207', title:'one action so far', status:'investigating',
+                understanding:14, hoursSpent:0.5,
+                history:[{ actionId:'read_code', minutes:30, gained:14, understanding:14, at:0 }] };
+    tickets = [uTicket];
+    rows = [{ id:'BUG-2207', merged:false, route:uTicket.history, best:BEST_PATHS['BUG-2207'] }];
+    burnCfg = { points: [{id:'BUG-2207',points:3}], day: 1, totalDays: DAYS, merged: [] };
+    people = [PEOPLE[0]];
+    elapsed = 0.5; day = 1;
+  } else if (variant === 'uipayload') {
+    tickets = uiPayload();
+    uTicket = tickets[1];                       /* the plateau ticket */
+    people = PEOPLE.map(function (p) {
+      return { id:p.id, name:p.name, role:p.role, trust:p.trust, start:55, startTrust:55,
+               delta:p.trust - 55 };
+    });
+    burnCfg = { points: 16, totalPoints: 16, day: day, totalDays: DAYS,
+                merged: MERGED.map(function (m) { return { id:m.id, points:m.points }; }),
+                mergedIds: MERGED.map(function (m) { return m.id; }), tickets: tickets };
+    rows = tickets.map(function (t) {
+      return { id:t.id, title:t.title, merged:t.status === 'merged',
+               route:t.segments, history:t.history, best:BEST_PATHS[t.id],
+               hoursSpent:t.hoursSpent, timeboxHours:TIMEBOX[t.id], verdict:VERDICT[t.id] };
+    });
+  } else if (variant === 'nan') {
+    var junk = [
+      { id:'BAD-1', title:null, status:'???', understanding:NaN, hoursSpent:NaN, points:NaN,
+        history:[ {actionId:'read_code', minutes:NaN, gained:NaN, at:NaN},
+                  {actionId:null, minutes:Infinity, gained:-Infinity, at:-5},
+                  null, 42, {kind:'ask', to:'deepa', minutes:'15', gained:'30'},
+                  {actionId:'read_docs', minutes:20, gained:-9, understanding:'x'} ] },
+      null, 7,
+      { id:'BAD-2', hoursSpent:-4, history:'not an array' },
+      { id:'BAD-3', history:[] }
+    ];
+    tickets = junk;
+    uTicket = junk[0];
+    people = [ {name:'ghost', trust:NaN, delta:NaN}, null, {name:'over', trust:1e9, delta:-1e9}, 5 ];
+    burnCfg = { points: NaN, day: NaN, totalDays: NaN, merged: 'nope' };
+    rows = [ {id:'BAD-1', route:'x', best:null, hoursSpent:NaN}, null,
+             {id:'BAD-2', route:[{actionId:'read_code',minutes:NaN,gained:NaN}], best:['read_code','ask_deepa']} ];
+    elapsed = NaN; day = NaN;
+  }
+
+  document.getElementById('uName').textContent = uTicket && uTicket.id ? uTicket.id : '—';
+
+  var errs = [];
+  function guard(name, fn) { try { fn(); } catch (e) { errs.push(name + ': ' + e.message); } }
+
+  guard('timeline', function () {
+    b.timeline.timeline({ tickets: tickets, day: day, totalDays: DAYS, hoursPerDay: HPD, elapsedHours: elapsed });
+  });
+  guard('understanding', function () {
+    b.understanding.understanding({ ticket: uTicket, history: uTicket && uTicket.history,
+                                    implementReadyAt: 70, correctAt: 90 });
+  });
+  guard('burn', function () { b.burn.burn(burnCfg); });
+  guard('trust', function () { b.trust.trust({ people: people }); });
+  guard('truth', function () {
+    b.truth.truth({ perTicket: rows, paths: BEST_PATHS,
+                    hoursSpent: SPRINT.elapsed, bestHours: 41.5 });
+  });
+
+  var st = document.getElementById('status');
+  st.textContent = errs.length ? ('THREW — ' + errs.join(' | '))
+    : ('ok · ' + variant + ' · ' + (isFinite(elapsed) ? elapsed.toFixed(2) : '--') + 'h logged');
+  st.className = errs.length ? 'err' : '';
+}
+
+var btns = document.querySelectorAll('button[data-v]');
+Array.prototype.forEach.call(btns, function (btn) {
+  btn.addEventListener('click', function () {
+    variant = btn.getAttribute('data-v');
+    Array.prototype.forEach.call(btns, function (b2) { b2.classList.toggle('on', b2 === btn); });
+    sizeAll(); render();
+  });
+});
+Array.prototype.forEach.call(btns, function (b2) { b2.classList.toggle('on', b2.getAttribute('data-v') === 'normal'); });
+
+window.addEventListener('resize', function () { sizeAll(); render(); });
+
+/* ?case=plateau lets headless Chrome shoot any variant directly */
+(function () {
+  var m = /[?&]case=([a-z]+)/.exec(location.search);
+  if (m) {
+    variant = m[1];
+    Array.prototype.forEach.call(btns, function (b2) { b2.classList.toggle('on', b2.getAttribute('data-v') === variant); });
+  }
+  sizeAll();
+  render();
+})();
+</script>
+</body>
+</html>

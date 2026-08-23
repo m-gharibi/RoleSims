@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day Trader — UI PREVIEW (mock modules)</title>
+<link rel="stylesheet" href="../sim/ui.css">
+<style>
+  /* preview-only chrome so nobody mistakes this for the real app */
+  #preview-tag {
+    position: fixed; top: 0; right: 0; z-index: 500;
+    background: #d29922; color: #0d1117; font: 700 9px/1 ui-monospace, Menlo, monospace;
+    letter-spacing: .16em; padding: 4px 8px; border-bottom-left-radius: 4px;
+    pointer-events: none; opacity: .85;
+  }
+</style>
+</head>
+<body>
+
+<div id="preview-tag">UI PREVIEW · MOCK ENGINE/CHART/DESK</div>
+
+<div id="dts-boot" style="padding:40px 32px;font:13px ui-monospace,Menlo,monospace;color:#8b949e">
+  booting preview…
+</div>
+
+<!-- MOCKS INSTEAD OF THE REAL MODULES.
+     ui_mocks.js defines window.SIM_DAYS, window.Engine, window.Chart, window.Desk
+     in one file, replacing data/days.js + sim/engine.js + sim/chart.js + sim/desk.js.
+     Only sim/ui.js and sim/ui.css below are the real product files. -->
+<script src="ui_mocks.js"></script>
+<script src="../sim/ui.js"></script>
+
+<script>
+/* --------------------------------------------------------------------------
+   PREVIEW-ONLY test driver.  Does nothing unless you add a hash to the URL:
+
+     ui_preview.html                -> normal manual preview
+     ui_preview.html#auto=brief     -> jump to the briefing screen
+     ui_preview.html#auto=gate      -> floor + the 09:30 gate modal open
+     ui_preview.html#auto=floor     -> floor, ~30 bars in, with a live position
+     ui_preview.html#auto=close     -> trade a full day and land on the close-out
+     ui_preview.html#auto=smoke     -> exercise keyboard shortcuts, order
+                                       rejections, MAX sizing, working orders,
+                                       cancel and flatten; results land in
+                                       <pre id="diag-out">
+     ui_preview.html#auto=diag      -> layout/canvas diagnostics into
+                                       <pre id="diag-out"> (useful with
+                                       `chrome --headless --dump-dom`)
+
+   Used for screenshots / headless smoke tests. It only clicks the same
+   controls a human would.
+   -------------------------------------------------------------------------- */
+(function () {
+  /* ui.js wipes document.body, so put the corner tag back afterwards */
+  setTimeout(function () {
+    if (!document.getElementById('preview-tag')) {
+      var t = document.createElement('div');
+      t.id = 'preview-tag';
+      t.textContent = 'UI PREVIEW · MOCK ENGINE/CHART/DESK';
+      document.body.appendChild(t);
+    }
+  }, 60);
+
+  var m = /auto=([a-z]+)/.exec(location.hash || '');
+  if (!m) return;
+  var target = m[1];
+  var log = function (s) { console.log('[driver] ' + s); };
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var click = function (sel) {
+    var e = document.querySelector(sel);
+    if (e) { e.click(); log('click ' + sel); return true; }
+    log('MISSING ' + sel); return false;
+  };
+
+  /* fill the ticket the way a human would, then hit submit */
+  async function order(side, qty, type, price, thesis) {
+    click('#scr-floor .side-b[data-side="' + side + '"]');
+    click('#t-type [data-type="' + type + '"]');
+    await sleep(60);
+    document.getElementById('t-qty').value = String(qty);
+    if (price !== null && price !== undefined) {
+      var p = document.getElementById('t-px');
+      p.value = String(price); p.dispatchEvent(new Event('input'));
+    }
+    var th = document.getElementById('t-thesis');
+    th.value = thesis || '';
+    th.dispatchEvent(new Event('input'));
+    click('#t-submit');
+    log('order ' + side + ' ' + qty + ' ' + type + ' -> ' +
+        document.getElementById('t-msg').textContent);
+  }
+
+  function autoDismissGates() {
+    setInterval(function () {
+      var b = document.querySelector('#modal-layer.active [data-ok]');
+      if (b) b.click();
+    }, 120);
+  }
+
+  async function run() {
+    await sleep(250);
+    click('[data-start="0"]');
+    if (target === 'brief') return log('stopped at briefing');
+
+    await sleep(350);
+    click('#b-bell');
+    await sleep(450);
+    if (target === 'gate') return log('stopped at open gate');
+
+    if (target === 'close') autoDismissGates();
+    click('#modal-layer [data-ok]');
+    await sleep(250);
+    click('#f-speed [data-speed="240"]');
+
+    if (target === 'smoke') {
+      var R = [];
+      var key = function (k) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      };
+      var msg = function () { return document.getElementById('t-msg').textContent.trim(); };
+      var sideOn = function () {
+        var e = document.querySelector('#scr-floor .side-b.is-on');
+        return e && e.getAttribute('data-side');
+      };
+      await sleep(600);
+
+      key('s'); R.push('key S -> side=' + sideOn() + ' focus=' + document.activeElement.id);
+      document.activeElement.blur();
+      key('b'); R.push('key B -> side=' + sideOn() + ' focus=' + document.activeElement.id);
+      document.activeElement.blur();
+      key(' '); R.push('key SPACE -> pauseBtn=' + document.getElementById('f-pause').textContent);
+      key(' '); R.push('key SPACE -> pauseBtn=' + document.getElementById('f-pause').textContent);
+      key('f'); R.push('key F flat -> ' + msg());
+
+      /* rejection: no thesis */
+      await order('BUY', 100, 'MKT', null, 'short');
+      R.push('no-thesis -> ' + msg());
+      /* rejection: buying power */
+      await order('BUY', 99999, 'MKT', null, 'A perfectly good thesis that is long enough.');
+      R.push('over-bp -> ' + msg());
+      /* MAX button respects buying power */
+      click('#t-max');
+      R.push('max qty -> ' + document.getElementById('t-qty').value +
+             ' (ticket hdr: ' + document.getElementById('t-bp').textContent + ')');
+      /* good order */
+      await order('BUY', 200, 'MKT', null, 'Opening drive continuation over the pre-market high.');
+      R.push('good order -> ' + msg());
+      await sleep(900);
+      R.push('after fill: shares=' + document.getElementById('p-shares').textContent +
+             ' blotter=' + document.getElementById('bl-count').textContent +
+             ' toasts=' + document.getElementById('f-toasts').children.length);
+      /* reducing side does not need a thesis */
+      R.push('thesis state when reducing: (sell) ');
+      click('#scr-floor .side-b[data-side="SELL"]');
+      R.push('  ' + document.getElementById('t-thesis-state').textContent);
+      /* working order + cancel */
+      await order('BUY', 100, 'LMT', (parseFloat(document.getElementById('c-last').textContent) - 5).toFixed(2),
+                  'Resting bid well below the market to test the working-order list.');
+      await sleep(200);
+      R.push('working rows=' + document.querySelectorAll('#f-working-body tr').length +
+             ' count=' + document.getElementById('w-count').textContent);
+      click('#f-working-body [data-cancel]');
+      await sleep(200);
+      R.push('after cancel rows=' + document.getElementById('f-working-body').textContent.trim());
+      /* flatten via keyboard */
+      key('f');
+      await sleep(900);
+      R.push('after F flatten: shares=' + document.getElementById('p-shares').textContent);
+      R.push('feed msgs=' + window.UI._feed().length);
+      R.push('page scroll=' + document.documentElement.scrollWidth + 'x' +
+             document.documentElement.scrollHeight + ' viewport=' +
+             window.innerWidth + 'x' + window.innerHeight);
+      click('#f-pause');
+      var o3 = document.createElement('pre');
+      o3.id = 'diag-out'; o3.textContent = R.join('\n');
+      document.body.appendChild(o3);
+      return log('smoke done');
+    }
+
+    if (target === 'diag') {
+      await sleep(2000);
+      var cv = document.getElementById('c-canvas');
+      var r = cv.getBoundingClientRect();
+      var st = window.UI._state();
+      var out = document.createElement('pre');
+      out.id = 'diag-out';
+      out.textContent = JSON.stringify({
+        canvasRect: [Math.round(r.width), Math.round(r.height)],
+        canvasAttr: [cv.width, cv.height],
+        hostRect: (function (e) { var b = e.getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)]; })(document.getElementById('c-host')),
+        bodyScroll: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+        viewport: [window.innerWidth, window.innerHeight],
+        pixels: (function () {
+          var c = cv.getContext('2d');
+          var img = c.getImageData(0, 0, cv.width, cv.height).data;
+          var nonBg = 0, greens = 0, reds = 0, minX = 1e9, maxX = -1, minY = 1e9, maxY = -1;
+          for (var yy = 0; yy < cv.height; yy++) {
+            for (var xx = 0; xx < cv.width; xx++) {
+              var o2 = (yy * cv.width + xx) * 4;
+              var r2 = img[o2], g2 = img[o2 + 1], b2 = img[o2 + 2];
+              if (Math.abs(r2 - 13) > 6 || Math.abs(g2 - 17) > 6 || Math.abs(b2 - 23) > 6) {
+                nonBg++;
+                if (xx < minX) minX = xx; if (xx > maxX) maxX = xx;
+                if (yy < minY) minY = yy; if (yy > maxY) maxY = yy;
+                if (g2 > r2 + 30) greens++;
+                if (r2 > g2 + 30) reds++;
+              }
+            }
+          }
+          return { nonBg: nonBg, greens: greens, reds: reds,
+                   bbox: [minX, minY, maxX, maxY], total: cv.width * cv.height };
+        })(),
+        dpr: window.devicePixelRatio,
+        chartErrVisible: !document.getElementById('c-err').classList.contains('hidden'),
+        chartErrText: document.getElementById('c-err').textContent,
+        engineIdx: st && st.idx, engineM: st && st.m
+      }, null, 1);
+      document.body.appendChild(out);
+      click('#f-pause');
+      return log('diag written');
+    }
+
+    if (target === 'close') {
+      /* put two round trips on the tape so the tearsheet has something in it */
+      await sleep(1200);
+      await order('BUY', 300, 'MKT', null, 'Long the opening drive over the pre-market high; out under 181.');
+      await sleep(2500);
+      await order('SELL', 300, 'MKT', null, '');
+      await sleep(1500);
+      await order('SELL', 200, 'MKT', null, 'Fade is on: lower high into the 30-min VWAP, stop over the high.');
+      await sleep(3000);
+      await order('BUY', 200, 'MKT', null, '');
+
+      for (var i = 0; i < 500; i++) {
+        await sleep(300);
+        if (document.getElementById('scr-close').classList.contains('active')) break;
+      }
+      await sleep(300);
+      click('#co-copy');
+      await sleep(400);
+      var out2 = document.createElement('pre');
+      out2.id = 'diag-out';
+      out2.textContent = JSON.stringify({
+        landed: document.getElementById('scr-close').classList.contains('active'),
+        copyStatus: document.getElementById('co-copystatus').textContent,
+        fallbackShown: !document.getElementById('co-copyarea').classList.contains('hidden'),
+        fallbackChars: document.getElementById('co-md').value.length,
+        fallbackHead: document.getElementById('co-md').value.slice(0, 400),
+        tradeRows: document.querySelectorAll('#co-trades tr').length,
+        fillRows: document.querySelectorAll('#co-fills tr').length,
+        dayPnl: document.getElementById('co-pnl').textContent
+      }, null, 1);
+      document.body.appendChild(out2);
+      return log('landed on close-out');
+    }
+
+    /* floor: run a while, then put a real position on */
+    await sleep(7000);
+    document.getElementById('t-qty').value = '400';
+    var th = document.getElementById('t-thesis');
+    th.value = 'Holding above the pre-market high with volume; invalidated under 181.00.';
+    th.dispatchEvent(new Event('input'));
+    click('#t-submit');
+    await sleep(1500);
+    document.getElementById('t-qty').value = '200';
+    document.getElementById('t-px').value = '';
+    click('#t-type [data-type="LMT"]');
+    await sleep(100);
+    var px = document.getElementById('t-px');
+    px.value = (parseFloat(document.getElementById('c-last').textContent) - 0.60).toFixed(2);
+    px.dispatchEvent(new Event('input'));
+    th.value = 'Adding on a pullback to the rising 9EMA, same invalidation.';
+    th.dispatchEvent(new Event('input'));
+    click('#t-submit');
+    await sleep(2500);
+    click('#f-pause');
+    log('stopped on the floor with a position');
+  }
+
+  window.addEventListener('load', function () { run(); });
+})();
+</script>
+
+</body>
+</html>

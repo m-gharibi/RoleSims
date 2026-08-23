@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Researcher — UI PREVIEW (mock modules)</title>
+<link rel="stylesheet" href="../sim/ui.css">
+<style>
+  /* preview-only chrome so nobody mistakes this for the real app */
+  #preview-tag {
+    position: fixed; top: 0; right: 0; z-index: 500;
+    background: #d29922; color: #0d1117; font: 700 9px/1 ui-monospace, Menlo, monospace;
+    letter-spacing: .16em; padding: 4px 8px; border-bottom-left-radius: 4px;
+    pointer-events: none; opacity: .85;
+  }
+</style>
+</head>
+<body>
+
+<div id="preview-tag">UI PREVIEW · MOCK LAB/PLOTS/TEAM</div>
+
+<div id="mls-boot" style="padding:40px 32px;font:13px ui-monospace,Menlo,monospace;color:#8b949e">
+  booting preview…
+</div>
+
+<!-- MOCKS INSTEAD OF THE REAL MODULES.
+     ui_mocks.js defines window.SIM_WORLD, window.Lab, window.Plots and window.Team
+     in one file, replacing data/world.js + sim/lab.js + sim/plots.js + sim/team.js.
+     Only sim/ui.js and sim/ui.css below are the real product files. -->
+<script src="ui_mocks.js"></script>
+
+<script>
+/* PREVIEW ONLY — when a driver hash is present, take the wall clock away from
+   the mock Lab so the scripted driver advances time deterministically with the
+   same +1h / NEXT RESULT buttons a human would use. Without this, headless
+   Chrome's --virtual-time-budget runs the whole week in the first millisecond.
+   The real product never touches this path. */
+(function () {
+  if (!/auto=/.test(location.hash || '')) return;
+  window.__realLabStart = window.Lab.start;
+  window.Lab.start = function () { /* manual clock in driver mode */ };
+  window.Lab.resume = function () { /* manual clock in driver mode */ };
+})();
+</script>
+
+<script src="../sim/ui.js"></script>
+
+<script>
+/* --------------------------------------------------------------------------
+   PREVIEW-ONLY test driver. Does nothing unless a hash is present:
+
+     ui_preview.html                 -> manual preview (brief screen)
+     #auto=brief                     -> brief screen
+     #auto=design                    -> lab console, designer primed with an
+                                        experiment that is TOO NOISY for the
+                                        stated prediction (the teaching moment)
+     #auto=lab                       -> lab console with jobs running + results
+     #auto=gate                      -> lab console with the midweek gate open
+     #auto=kill                      -> lab console with the kill-confirm modal
+     #auto=readout                   -> readout screen with evidence populated
+     #auto=debrief                   -> full run through to the debrief
+     #auto=copy                      -> debrief + the copy-to-clipboard fallback
+     #auto=diag                      -> layout diagnostics into <pre id="diag-out">
+
+   It only clicks the same controls a human would.
+   -------------------------------------------------------------------------- */
+(function () {
+  setTimeout(function () {
+    if (!document.getElementById('preview-tag')) {
+      var t = document.createElement('div');
+      t.id = 'preview-tag';
+      t.textContent = 'UI PREVIEW · MOCK LAB/PLOTS/TEAM';
+      document.body.appendChild(t);
+    }
+  }, 60);
+
+  var m = /auto=([a-z]+)/.exec(location.hash || '');
+  if (!m) return;
+  var target = m[1];
+  var log = function (s) { console.log('[driver] ' + s); };
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var $ = function (sel) { return document.querySelector(sel); };
+  var click = function (sel) {
+    var e = typeof sel === 'string' ? $(sel) : sel;
+    if (e) { e.click(); return true; }
+    log('MISSING ' + sel); return false;
+  };
+  var setVal = function (sel, v) {
+    var e = $(sel);
+    if (!e) { log('MISSING ' + sel); return; }
+    e.value = String(v);
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  var dismissModal = function () {
+    var b = $('#modal-layer.active [data-ok]');
+    if (b) { b.click(); return true; }
+    return false;
+  };
+
+  function pickIvs(ids) {
+    document.querySelectorAll('#d-ivs .iv-row').forEach(function (r) {
+      var on = r.classList.contains('is-on');
+      var want = ids.indexOf(r.getAttribute('data-iv')) >= 0;
+      if (on !== want) r.click();
+    });
+  }
+  function setScale(s) { click('#d-scale [data-scale="' + s + '"]'); }
+  function setSteps(s) { click('#d-steps [data-steps="' + s + '"]'); }
+  function setSeeds(n) {
+    var b = $('#d-seedbtns [data-seed="' + n + '"]');
+    if (b) b.click(); else setVal('#d-seeds', n);
+  }
+
+  async function design(ids, scale, steps, seeds, hyp, pred, lo, hi) {
+    pickIvs(ids); setScale(scale); setSteps(steps); setSeeds(seeds);
+    await sleep(30);
+    setVal('#d-hyp', hyp);
+    setVal('#d-pred', pred); setVal('#d-cilo', lo); setVal('#d-cihi', hi);
+    await sleep(30);
+  }
+  async function launch(ids, scale, steps, seeds, hyp, pred, lo, hi) {
+    await design(ids, scale, steps, seeds, hyp, pred, lo, hi);
+    click('#d-launch');
+    await sleep(40);
+  }
+  function advance(times) {
+    for (var i = 0; i < times; i++) click('#l-next');
+  }
+
+  async function intoLab() {
+    await sleep(200);
+    click('#b-go');
+    await sleep(250);
+    dismissModal();          /* the Monday plan gate */
+    await sleep(120);
+  }
+
+  async function runExperiments() {
+    await launch(['rope_scaling_v2'], '300m', 'std', 2,
+      'RoPE v2 should help long-context retrieval at every scale; a null result at 300M would surprise me.',
+      2.5, 1.0, 4.0);
+    await launch(['long_ctx_data_mix'], '1p4b', 'std', 2,
+      'The long-context mix should get stronger with scale, so measure it as high as I can afford.',
+      2.0, 0.5, 3.5);
+    await launch(['mup_transfer'], '70m', 'std', 1,
+      'Halberd claim muP is worth +3 at 70M. One seed to see whether it is even worth replicating.',
+      3.0, 1.5, 4.5);
+    await launch(['doc_packing_boundary', 'long_ctx_data_mix'], '300m', 'std', 3,
+      'Packing and the data mix are the same idea applied twice; I expect them to interact positively.',
+      4.0, 2.0, 6.0);
+    advance(6);
+    await sleep(120);
+    dismissModal();
+    await sleep(60);
+    await launch(['attn_sink_tokens'], '1p4b', 'std', 3,
+      'Sink tokens are reported positive but never replicated here. Measure high enough to see a sign flip.',
+      1.1, -0.5, 2.5);
+    await launch(['qk_norm'], '300m', 'std', 2,
+      'QK norm should be a small stable win; predicting under a point.',
+      0.8, 0.0, 1.6);
+    advance(8);
+    await sleep(150);
+    dismissModal();
+    await sleep(60);
+    advance(6);
+    await sleep(150);
+    dismissModal();
+  }
+
+  async function run() {
+    if (target === 'brief') { await sleep(250); return log('stopped at brief'); }
+
+    if (target === 'design') {
+      await intoLab();
+      /* the single most important screen: an experiment too noisy to answer
+         the question the researcher says they are asking */
+      await design(['attn_sink_tokens'], '70m', 'short', 1,
+        'Sink tokens should give about half a point at every scale; anything negative would surprise me.',
+        0.5, -0.2, 1.2);
+      await sleep(200);
+      return log('stopped on the designer with a too-noisy experiment');
+    }
+
+    if (target === 'kill') {
+      await intoLab();
+      await launch(['long_ctx_data_mix'], '7b', 'std', 2,
+        'The mix should be biggest at the largest scale I can buy; this is the anchor experiment.',
+        3.2, 1.8, 4.6);
+      click('#l-adv4'); click('#l-adv4'); click('#l-adv4');
+      await sleep(150);
+      dismissModal();
+      await sleep(100);
+      click('#j-body [data-kill]');
+      await sleep(200);
+      return log('kill confirm open');
+    }
+
+    if (target === 'gate') {
+      await intoLab();
+      await launch(['rope_scaling_v2'], '300m', 'std', 2,
+        'RoPE v2 should help long-context retrieval at every scale I can measure.',
+        2.5, 1.0, 4.0);
+      /* walk to Wednesday 14:00 -> the midweek gate */
+      for (var i = 0; i < 30; i++) { click('#l-adv1'); if ($('#modal-layer.active')) break; }
+      await sleep(250);
+      return log('gate open: ' + (($('#modal-layer .modal-hd h3') || {}).textContent || 'NONE'));
+    }
+
+    await intoLab();
+    await runExperiments();
+    await sleep(200);
+
+    if (target === 'lab' || target === 'diag') {
+      /* leave one job running so the progress bars are visible */
+      await launch(['z_loss_stabilizer'], '1p4b', 'std', 2,
+        'Z-loss should be a small reliable win; mostly checking it does not hurt long context.',
+        1.4, 0.4, 2.4);
+      await sleep(150);
+      click('#l-adv1');
+      await sleep(200);
+      dismissModal();
+      await sleep(150);
+    }
+
+    if (target === 'diag') {
+      var out = document.createElement('pre');
+      out.id = 'diag-out';
+      var rects = {};
+      ['scr-lab', 'd-prev', 'pl-scaling', 'pl-forest', 'j-body', 'r-body', 'feed-body'].forEach(function (k) {
+        var e = document.getElementById(k);
+        if (!e) { rects[k] = 'MISSING'; return; }
+        var r = e.getBoundingClientRect();
+        rects[k] = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+      });
+      var cv = document.getElementById('pl-scaling');
+      out.textContent = JSON.stringify({
+        viewport: [window.innerWidth, window.innerHeight],
+        pageScroll: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+        overflowX: document.documentElement.scrollWidth > window.innerWidth,
+        overflowY: document.documentElement.scrollHeight > window.innerHeight,
+        rects: rects,
+        canvasAttr: cv ? [cv.width, cv.height] : null,
+        dpr: window.devicePixelRatio,
+        results: (window.UI._state() || {}).results.length,
+        running: (window.UI._state() || {}).running.length,
+        feed: window.UI._feed().length,
+        preview: window.UI._preview(),
+        plotErrs: ['pl-scaling-err', 'pl-forest-err'].map(function (k) {
+          var e = document.getElementById(k);
+          return e && !e.classList.contains('hidden') ? e.textContent : null;
+        })
+      }, null, 1);
+      document.body.appendChild(out);
+      return log('diag written');
+    }
+
+    if (target === 'lab') return log('stopped on the lab console');
+
+    /* readout / debrief */
+    click('#l-readout');
+    await sleep(250);
+    ['rope_scaling_v2', 'long_ctx_data_mix', 'doc_packing_boundary', 'attn_sink_tokens'].forEach(function (i) {
+      var c = document.querySelector('#ro-cards [data-ro="' + i + '"]');
+      if (c) c.click();
+    });
+    setVal('#ro-conf', 75);
+    setVal('#ro-rat',
+      'RoPE v2 and the long-context mix both measured clear of zero, the mix at 1.4B where it is ' +
+      'strongest. Packing is included for its interaction with the mix, which I measured directly. ' +
+      'Sink tokens are the risk: I measured them at 1.4B only and the sign may not hold at 70B.');
+    await sleep(200);
+
+    if (target === 'readout') return log('stopped on the readout');
+
+    click('#ro-submit');
+    await sleep(150);
+    dismissModal();       /* untested-picks confirm, if any */
+    await sleep(400);
+
+    var out2 = document.createElement('pre');
+    out2.id = 'diag-out';
+    out2.textContent = JSON.stringify({
+      onDebrief: document.getElementById('scr-debrief').classList.contains('active'),
+      grade: (document.getElementById('db-grade') || {}).textContent,
+      score: window.UI._score(),
+      verdictRows: document.querySelectorAll('#db-verdict tr').length,
+      calibRows: document.querySelectorAll('#db-calibrows tr').length,
+      comboRows: document.querySelectorAll('#db-combo tr').length,
+      truthErr: (function () {
+        var e = document.getElementById('db-truth-err');
+        return e && !e.classList.contains('hidden') ? e.textContent : null;
+      })(),
+      truthPixels: (function () {
+        var cv = document.getElementById('db-truth');
+        if (!cv) return 'no canvas';
+        var r = cv.getBoundingClientRect();
+        try {
+          var d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+          var nonBg = 0;
+          for (var i = 0; i < d.length; i += 4) {
+            if (Math.abs(d[i] - 17) > 6 || Math.abs(d[i + 1] - 22) > 6 || Math.abs(d[i + 2] - 29) > 6) nonBg++;
+          }
+          return { attr: [cv.width, cv.height], rect: [Math.round(r.width), Math.round(r.height)], nonBg: nonBg };
+        } catch (e) { return 'err ' + e.message; }
+      })()
+    }, null, 1);
+    document.body.appendChild(out2);
+    if (target === 'copy') { click('#db-copy'); await sleep(300); }
+    /* headless screenshots occasionally capture before the last canvas paint —
+       nudge a repaint so the truth plot is definitely composited */
+    window.dispatchEvent(new Event('resize'));
+    await sleep(400);
+    log('landed on debrief');
+  }
+
+  window.addEventListener('load', function () { run(); });
+})();
+</script>
+
+</body>
+</html>

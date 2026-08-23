@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Junior Software Engineer (pre-AI) — Thistle sprint simulator</title>
+<link rel="stylesheet" href="sim/ui.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1117'/%3E%3Cpath d='M11 10 L5 16 L11 22' fill='none' stroke='%2339c5cf' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M21 10 L27 16 L21 22' fill='none' stroke='%23d29922' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M18 8 L14 24' fill='none' stroke='%233fb950' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- sim/ui.js replaces this with the real screens once every module has loaded.
+     If you are staring at this message, a script below failed to parse and
+     ui.js never ran — open the console (Cmd-Opt-J). -->
+<div id="jes-boot" style="padding:40px 32px;font:13px ui-monospace,Menlo,monospace;color:#8b949e">
+  <div style="letter-spacing:.2em;color:#c9d1d9;font-size:18px">JUNIOR SOFTWARE ENGINEER (PRE-AI)</div>
+  <div style="margin-top:8px">booting…</div>
+</div>
+
+<!-- Load order is fixed by SPEC.md §0. Plain script tags only:
+     no ES modules, no bundler, no CDN, no fetch(). Runs from file://. -->
+<script src="data/repo.js"></script>    <!-- window.SIM_REPO -->
+<script src="sim/dev.js"></script>      <!-- window.Dev     -->
+<script src="sim/board.js"></script>    <!-- window.Board   -->
+<script src="sim/squad.js"></script>    <!-- window.Squad   -->
+<script src="sim/ui.js"></script>       <!-- boots everything -->
+
+</body>
+</html>

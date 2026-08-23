@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foundational ML Researcher — pretraining sim</title>
+<link rel="stylesheet" href="sim/ui.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1117'/%3E%3Cpath d='M4 25 C12 25 14 8 28 7' stroke='%2339c5cf' stroke-width='3' fill='none'/%3E%3Cline x1='10' y1='25' x2='10' y2='14' stroke='%238b949e' stroke-width='2'/%3E%3Cline x1='19' y1='19' x2='19' y2='7' stroke='%238b949e' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ui.js replaces this with the real screens once every module has loaded.
+     If you are staring at this message, a script below failed to parse and
+     ui.js never ran — open the console (Cmd-Opt-J). -->
+<div id="mls-boot" style="padding:40px 32px;font:13px ui-monospace,Menlo,monospace;color:#8b949e">
+  <div style="letter-spacing:.2em;color:#c9d1d9;font-size:18px">FOUNDATIONAL ML RESEARCHER</div>
+  <div style="margin-top:8px">booting…</div>
+</div>
+
+<!-- Load order is fixed by SPEC.md §0. Plain script tags only:
+     no ES modules, no bundler, no CDN, no fetch(). Runs from file://. -->
+<script src="data/world.js"></script>    <!-- window.SIM_WORLD -->
+<script src="sim/lab.js"></script>       <!-- window.Lab       -->
+<script src="sim/plots.js"></script>     <!-- window.Plots     -->
+<script src="sim/team.js"></script>      <!-- window.Team      -->
+<script src="sim/ui.js"></script>        <!-- boots everything -->
+
+</body>
+</html>

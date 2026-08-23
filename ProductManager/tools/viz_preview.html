@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Viz preview — Product Manager sim</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#c9d1d9;
+    --dim:#8b949e; --accent:#39c5cf; --bad:#f85149;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums;overflow:hidden}
+  #bar{display:flex;align-items:center;gap:6px;padding:6px 10px;height:34px;
+    border-bottom:1px solid var(--border);background:var(--panel);white-space:nowrap;overflow:hidden}
+  #bar b{color:var(--accent);font-weight:600;margin-right:6px}
+  #bar .sep{color:var(--border);margin:0 4px}
+  a.btn,button{background:transparent;border:1px solid var(--border);color:var(--dim);
+    font:inherit;padding:2px 7px;cursor:pointer;text-decoration:none;border-radius:3px}
+  a.btn:hover,button:hover{color:var(--text);border-color:var(--dim)}
+  a.btn.on,button.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+  #err{color:var(--bad);margin-left:auto;padding-right:6px}
+  #grid{display:grid;gap:8px;padding:8px;height:calc(100vh - 34px)}
+  #grid.multi{grid-template-columns:900px 1fr;grid-template-rows:322px 290px 250px}
+  #grid.multi .wide{grid-column:1 / -1}
+  #grid.single{grid-template-columns:1fr;grid-template-rows:1fr}
+  .cell{border:1px solid var(--border);background:var(--panel);position:relative;min-width:0;min-height:0}
+  .cell canvas{display:block;width:100%;height:100%}
+  .cell.tiny{width:60px;height:40px}
+  .tag{position:absolute;bottom:-1px;right:-1px;font-size:9px;color:#3d444d;
+    background:var(--bg);border:1px solid var(--border);padding:0 4px;z-index:2}
+</style>
+</head>
+<body>
+<div id="bar">
+  <b>VIZ PREVIEW</b>
+  <span id="cases"></span>
+  <span class="sep">|</span>
+  <span id="onlys"></span>
+  <span id="err"></span>
+</div>
+<div id="grid"></div>
+
+<script src="../sim/viz.js"></script>
+<script>
+/* ------------------------------------------------------------------ *
+ * Deterministic synthetic data. Mirrors the SPEC observation model:
+ *   reading = truth + Σ bias[instrument][tag] + N(0, noise)
+ * ------------------------------------------------------------------ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+var rnd = mulberry32(20260816);
+function gauss(sd){var u=1-rnd(),v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)*sd;}
+
+var FEATURES=[
+ {id:'onboarding_checklist',name:'Onboarding checklist',tags:['onboarding'],est:5},
+ {id:'template_gallery',    name:'Template gallery',    tags:['onboarding','workflow'],est:8},
+ {id:'realtime_collab',     name:'Realtime co-editing', tags:['flashy','workflow'],est:10},
+ {id:'perf_p95_latency',    name:'P95 latency work',    tags:['infra','fix'],est:6},
+ {id:'smart_alerts',        name:'Smart alerts',        tags:['workflow'],est:6},
+ {id:'csv_export_v2',       name:'CSV export v2',       tags:['fix'],est:3},
+ {id:'mobile_view',         name:'Mobile view',         tags:['flashy'],est:10},
+ {id:'sso_scim',            name:'SSO / SCIM provisioning',tags:['enterprise','fix'],est:8},
+ {id:'admin_audit_log',     name:'Admin audit log',     tags:['enterprise'],est:5},
+ {id:'dashboard_themes',    name:'Dashboard themes',    tags:['flashy'],est:5}
+];
+var TRUTH={onboarding_checklist:4.2,template_gallery:2.6,realtime_collab:1.1,
+ perf_p95_latency:3.4,smart_alerts:2.0,csv_export_v2:0.8,mobile_view:0.3,
+ sso_scim:2.9,admin_audit_log:0.4,dashboard_themes:0.1};
+var BIAS={
+ sales_anecdote :{enterprise:2.6, flashy:1.1, onboarding:-0.8, fix:0.2, _noise:1.5},
+ support_tickets:{fix:2.2, infra:1.4, onboarding:-1.6, enterprise:0.3, _noise:1.0},
+ usage_analytics:{workflow:0.9, onboarding:-1.3, flashy:-0.4, _noise:0.8},
+ survey         :{flashy:2.4, infra:-1.6, workflow:0.5, _noise:1.2},
+ interviews     :{onboarding:0.4, enterprise:-0.3, _noise:0.9},
+ fake_door      :{flashy:0.3, _noise:0.6},
+ ab_test        :{_noise:0.3}
+};
+var INSTS=['sales_anecdote','support_tickets','usage_analytics','survey','interviews','fake_door','ab_test'];
+
+function reading(f,inst){
+  var b=BIAS[inst]||{_noise:1}, v=TRUTH[f.id]||0;
+  for(var i=0;i<f.tags.length;i++) v+=(b[f.tags[i]]||0);
+  return v+gauss(b._noise||1);
+}
+/* who researched what — deliberately uneven, like a real quarter */
+var PLAN={
+ onboarding_checklist:['sales_anecdote','support_tickets','usage_analytics','survey','interviews'],
+ template_gallery:['survey','usage_analytics','interviews'],
+ realtime_collab:['sales_anecdote','survey','usage_analytics','fake_door'],
+ perf_p95_latency:['support_tickets','usage_analytics'],
+ smart_alerts:['interviews','survey'],
+ csv_export_v2:['support_tickets'],
+ mobile_view:['survey','sales_anecdote','fake_door','usage_analytics'],
+ sso_scim:['sales_anecdote','interviews','support_tickets'],
+ admin_audit_log:['sales_anecdote','survey'],
+ dashboard_themes:[]
+};
+var PRED={onboarding_checklist:3.8,template_gallery:2.2,realtime_collab:4.5,
+ perf_p95_latency:2.0,smart_alerts:2.4,csv_export_v2:1.0,mobile_view:3.2,
+ sso_scim:3.0,admin_audit_log:1.4};
+
+var READINGS={};
+(function(){for(var i=0;i<FEATURES.length;i++){var f=FEATURES[i],list=PLAN[f.id]||[],out=[];
+  for(var j=0;j<list.length;j++) out.push({instrument:list[j],value:reading(f,list[j]),day:3+j*4});
+  /* one repeat run, to exercise the dot-dodge */
+  if(f.id==='onboarding_checklist') out.push({instrument:'sales_anecdote',value:reading(f,'sales_anecdote'),day:31});
+  READINGS[f.id]=out;} })();
+
+function evidenceRows(){
+  return FEATURES.map(function(f){
+    return {feature:f.name, featureId:f.id, readings:READINGS[f.id].slice(), predicted:PRED[f.id]};
+  });
+}
+function roadmap(){
+  return [
+   {featureId:'onboarding_checklist',status:'shipped', progress:1,   engWeeksSpent:7,  estCost:5,  revisedEstimate:7},
+   {featureId:'csv_export_v2',       status:'shipped', progress:1,   engWeeksSpent:3,  estCost:3},
+   {featureId:'perf_p95_latency',    status:'building',progress:0.55,engWeeksSpent:6.6,estCost:6,  revisedEstimate:12},
+   {featureId:'sso_scim',            status:'slipped', progress:0.15,engWeeksSpent:2.4,estCost:8,  revisedEstimate:16},
+   {featureId:'template_gallery',    status:'queued',  progress:0,   engWeeksSpent:0,  estCost:8},
+   {featureId:'realtime_collab',     status:'queued',  progress:0,   engWeeksSpent:0,  estCost:10},
+   {featureId:'dashboard_themes',    status:'dropped', progress:0,   engWeeksSpent:0,  estCost:5}
+  ];
+}
+var NAMES={};FEATURES.forEach(function(f){NAMES[f.id]=f.name;});
+
+function stakeholders(){
+  return [
+   {name:'Marguerite Osei',role:'CEO',            trust:44, delta:-8},
+   {name:'Dan Reilly',     role:'VP Sales',       trust:31, delta:-12},
+   {name:'Rina Chowdhury', role:'Engineering',    trust:78, delta:+6},
+   {name:'Kofi Adeyemi',   role:'Design',         trust:52, delta:-4},
+   {name:'Tomás Vidal',    role:'Support',        trust:67, delta:+8}
+  ];
+}
+function impactCfg(){
+  return {baseline:31.4, units:'pp', northStar:'W4 team activation',
+    shipped:[{name:'Onboarding checklist',delta:4.2},{name:'CSV export v2',delta:0.8},
+             {name:'Dashboard themes',delta:-0.3}],
+    projected:36.9};
+}
+function perFeature(){
+  return FEATURES.map(function(f){
+    var shipped = f.id==='onboarding_checklist'||f.id==='csv_export_v2'||f.id==='dashboard_themes';
+    var t=TRUTH[f.id];
+    var verdict = shipped ? (t<0.5?'vanity':'good call') : (t>2.5?'missed win':'right to skip');
+    return {id:f.id,name:f.name,truth:t,believed:PRED[f.id],shipped:shipped,
+            verdict:verdict,readings:READINGS[f.id].slice()};
+  });
+}
+var INSTOBJS=INSTS.map(function(i){return {id:i};});
+
+/* ------------------------------------------------------------------ *
+ * Degenerate-case transforms
+ * ------------------------------------------------------------------ */
+var CASES={
+  normal:{label:'normal'},
+  empty:{label:'no rows'},
+  single:{label:'one reading'},
+  flat:{label:'all equal'},
+  dirty:{label:'NaN / missing'},
+  caller:{label:'caller colours'},
+  tiny:{label:'tiny canvas'}
+};
+
+/* ui.js picks its own instrument colours and passes them per reading;
+ * viz must honour them so the legend can never disagree with the dots. */
+var UI_COLORS={sales_anecdote:'#e69f00',support_tickets:'#56b4e9',usage_analytics:'#34c98b',
+ survey:'#f0e442',interviews:'#cc79a7',fake_door:'#7aa2ff',ab_test:'#e6edf3'};
+function paint(list){return list.map(function(r){
+  var o={};for(var k in r)o[k]=r[k];o.color=UI_COLORS[r.instrument];return o;});}
+
+function dataFor(kind,cs){
+  if(cs==='caller'){
+    if(kind==='evidence'){var d=dataFor(kind,'normal');
+      d.rows=d.rows.map(function(r){var o={};for(var k in r)o[k]=r[k];o.readings=paint(r.readings);return o;});
+      return d;}
+    if(kind==='truth'){var t=dataFor(kind,'normal');
+      t.perFeature=t.perFeature.map(function(p){var o={};for(var k in p)o[k]=p[k];o.readings=paint(p.readings);return o;});
+      t.instruments=INSTS.map(function(i){return {id:i,name:i,color:UI_COLORS[i]};});
+      return t;}
+    return dataFor(kind,'normal');
+  }
+  if(cs==='empty'){
+    if(kind==='evidence')return {rows:[]};
+    if(kind==='gantt')  return {roadmap:[],week:1,totalWeeks:12,capacityLeft:48,capacityTotal:48};
+    if(kind==='trust')  return {stakeholders:[]};
+    if(kind==='impact') return {baseline:31.4,shipped:[],projected:31.4,units:'pp',northStar:'W4 team activation'};
+    return {perFeature:[],instruments:INSTOBJS};
+  }
+  if(cs==='single'){
+    if(kind==='evidence')return {rows:[{feature:'Onboarding checklist',readings:[{instrument:'survey',value:5.1}],predicted:4.0}]};
+    if(kind==='gantt')  return {roadmap:[{featureId:'onboarding_checklist',status:'building',progress:0.3,engWeeksSpent:1.5,estCost:5}],
+                                week:2,totalWeeks:12,capacityLeft:46.5,capacityTotal:48,names:NAMES};
+    if(kind==='trust')  return {stakeholders:[{name:'Marguerite Osei',role:'CEO',trust:60,delta:0}]};
+    if(kind==='impact') return {baseline:31.4,shipped:[{name:'CSV export v2',delta:0.8}],projected:32.2,units:'pp'};
+    return {perFeature:[{id:'onboarding_checklist',name:'Onboarding checklist',truth:4.2,believed:4.0,
+            shipped:true,verdict:'good call',readings:[{instrument:'survey',value:5.1}]}],instruments:INSTOBJS};
+  }
+  if(cs==='flat'){
+    if(kind==='evidence')return {rows:FEATURES.slice(0,5).map(function(f){
+      return {feature:f.name,readings:INSTS.slice(0,4).map(function(i){return {instrument:i,value:2};}),predicted:2};})};
+    if(kind==='gantt')  return {roadmap:FEATURES.slice(0,4).map(function(f){
+      return {featureId:f.id,status:'queued',progress:0,engWeeksSpent:0,estCost:0};}),
+      week:1,totalWeeks:12,capacityLeft:48,capacityTotal:48,names:NAMES};
+    if(kind==='trust')  return {stakeholders:stakeholders().map(function(s){return {name:s.name,role:s.role,trust:50,delta:0};})};
+    if(kind==='impact') return {baseline:31.4,shipped:[{name:'A',delta:0},{name:'B',delta:0}],projected:31.4,units:'pp'};
+    return {perFeature:FEATURES.slice(0,5).map(function(f){
+      return {id:f.id,name:f.name,truth:2,believed:2,shipped:false,verdict:'',
+              readings:INSTS.slice(0,4).map(function(i){return {instrument:i,value:2};})};}),instruments:INSTOBJS};
+  }
+  if(cs==='dirty'){
+    var bad=[NaN,Infinity,-Infinity,null,undefined,'7',{}];
+    if(kind==='evidence')return {rows:[
+      {feature:'Onboarding checklist',readings:[{instrument:'survey',value:NaN},{instrument:'sales_anecdote',value:3.1},
+        {instrument:null,value:'nope'},{value:1.2},{instrument:'weird_new_thing',value:6.4}],predicted:NaN},
+      {feature:null,readings:null,predicted:'x'},
+      {feature:'Mobile view',readings:[{instrument:'survey',value:Infinity},{instrument:'fake_door',value:0.4}],predicted:3.2},
+      null,
+      {feature:'SSO / SCIM provisioning',readings:[],predicted:2.9}]};
+    if(kind==='gantt')  return {roadmap:[
+      {featureId:'onboarding_checklist',status:'shipped',progress:NaN,engWeeksSpent:null,estCost:undefined},
+      {featureId:'sso_scim',status:'bogus',progress:2.5,engWeeksSpent:-4,estCost:NaN,revisedEstimate:Infinity},
+      null,{featureId:null,status:'queued'}],week:NaN,totalWeeks:null,capacityLeft:'x',capacityTotal:NaN,names:NAMES};
+    if(kind==='trust')  return {stakeholders:[{name:'Marguerite Osei',trust:NaN,delta:5},
+      {name:null,trust:120,delta:NaN},{name:'Rina Chowdhury',trust:-30,delta:Infinity},null,{}]};
+    if(kind==='impact') return {baseline:NaN,shipped:[{name:'A',delta:NaN},{name:null,delta:2.2},null,{name:'C',delta:'x'}],
+      projected:undefined,units:null};
+    return {perFeature:[{id:'a',name:'Feature A',truth:NaN,believed:2,shipped:true,verdict:null,
+        readings:[{instrument:'survey',value:NaN},{instrument:'sales_anecdote',value:4}]},
+      {id:null,truth:1,believed:NaN,readings:null},null,
+      {id:'c',name:'Feature C',truth:2,believed:2,readings:[{instrument:'ab_test',value:2}]}],
+      instruments:[null,{id:'survey'},'sales_anecdote',{}]};
+  }
+  /* normal */
+  if(kind==='evidence')return {rows:evidenceRows(),northStar:'W4 team activation'};
+  if(kind==='gantt')  return {roadmap:roadmap(),week:6,day:27,totalWeeks:12,capacityLeft:14,capacityTotal:48,
+                              engWeeksPerWeek:4,names:NAMES};
+  if(kind==='trust')  return {stakeholders:stakeholders(),lowTrustEng:40,lowTrustCeo:35,highTrustFavour:75};
+  if(kind==='impact') return impactCfg();
+  return {perFeature:perFeature(),instruments:INSTOBJS};
+}
+
+/* ------------------------------------------------------------------ *
+ * Harness
+ * ------------------------------------------------------------------ */
+var Q=(function(){var o={},s=location.search.replace(/^\?/,'').split('&');
+  for(var i=0;i<s.length;i++){if(!s[i])continue;var p=s[i].split('=');o[decodeURIComponent(p[0])]=decodeURIComponent(p[1]||'');}
+  return o;})();
+var CASE=CASES[Q.case]?Q.case:'normal';
+var ONLY=['evidence','gantt','trust','impact','truth'].indexOf(Q.only)>=0?Q.only:'';
+
+function href(params){
+  var c=params.case!==undefined?params.case:CASE, o=params.only!==undefined?params.only:ONLY;
+  var q=[];if(c!=='normal')q.push('case='+c);if(o)q.push('only='+o);
+  return location.pathname+(q.length?'?'+q.join('&'):'');
+}
+(function buildBar(){
+  var cs=document.getElementById('cases'),os=document.getElementById('onlys'),k;
+  for(k in CASES){(function(k){var a=document.createElement('a');a.className='btn'+(k===CASE?' on':'');
+    a.href=href({case:k});a.textContent=CASES[k].label;cs.appendChild(a);cs.appendChild(document.createTextNode(' '));})(k);}
+  var kinds=['','evidence','gantt','trust','impact','truth'];
+  for(var i=0;i<kinds.length;i++){(function(k){var a=document.createElement('a');a.className='btn'+(k===ONLY?' on':'');
+    a.href=href({only:k});a.textContent=k||'all';os.appendChild(a);os.appendChild(document.createTextNode(' '));})(kinds[i]);}
+})();
+
+var grid=document.getElementById('grid');
+var made=[];
+function cell(kind,cls){
+  var d=document.createElement('div');
+  d.className='cell'+(cls?' '+cls:'');
+  var t=document.createElement('span');t.className='tag';t.textContent=kind;d.appendChild(t);
+  var c=document.createElement('canvas');d.appendChild(c);
+  grid.appendChild(d);
+  return {kind:kind,canvas:c};
+}
+if(ONLY){
+  grid.className='single';
+  made.push(cell(ONLY));
+}else{
+  grid.className='multi';
+  made.push(cell('evidence'));
+  made.push(cell('trust'));
+  made.push(cell('gantt'));
+  made.push(cell('impact'));
+  var t=cell('truth');t.canvas.parentNode.className+=' wide';made.push(t);
+}
+if(CASE==='tiny'){
+  for(var i=0;i<made.length;i++) made[i].canvas.parentNode.className+=' tiny';
+}
+
+var errs=[];
+function renderAll(){
+  for(var i=0;i<made.length;i++){
+    var m=made[i];
+    try{
+      if(!m.v) m.v=Viz.create(m.canvas,{theme:'dark'});
+      var cs = CASE==='tiny' ? 'normal' : CASE;
+      m.v[m.kind](dataFor(m.kind,cs));
+    }catch(e){ errs.push(m.kind+': '+(e&&e.message||e)); }
+  }
+  document.getElementById('err').textContent = errs.length? ('ERRORS '+errs.join(' | ')) : '';
+  window.__vizReady=true;
+}
+window.addEventListener('resize',function(){for(var i=0;i<made.length;i++) if(made[i].v) made[i].v.resize();});
+window.onerror=function(m){errs.push(String(m));document.getElementById('err').textContent='ERRORS '+errs.join(' | ');};
+renderAll();
+</script>
+</body>
+</html>
