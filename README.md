@@ -12,7 +12,18 @@ To demonstrate that, I vibe coded a few standalone HTMLs that take you through t
 
 Each day starts with a briefing. There is a Slack channel showing communication with the boss and peers, and different artifacts one needs to use and a clock, emphasizing the time pressures.
 
-And of course, a bit of a disclaimer: No guarantee these accurately capture the day-to-day experience. They can obviously be further enhanced by feedback from people in those actual roles through interviews and role plays. The intent is to share the concept. 
+And of course, a bit of a disclaimer: No guarantee these accurately capture the day-to-day experience. They can obviously be further enhanced by feedback from people in those actual roles through interviews and role plays. The intent is to share the concept.
+
+### What it looks like
+
+The pre-open briefing: the overnight story, the bull and bear case, your line for the day, and what your PM wants from you — before the bell, before you can trade.
+
+![Day Trader — the pre-open briefing](docs/daytrader-briefing.png)
+
+The floor, live: real one-minute bars replayed with no lookahead, an order ticket that will not accept a trade without a typed thesis, and a desk that reacts to what you do — including when you do nothing.
+
+![Day Trader — the trading floor](docs/daytrader-floor.png)
+
 
 ---
 
